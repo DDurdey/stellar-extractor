@@ -24,8 +24,10 @@ export default function Home() {
     let drones = 0;
     let droneDamage = 1;
 
+
     let asteroids = [];
     let lasers = [];
+    let explosions = [];
     let droneUnits = [];
 
     // ===== CLICK UPGRADE STATE =====
@@ -62,17 +64,17 @@ export default function Home() {
     function getClickUpgradeCost() {
       return Math.floor(clickBaseCost * Math.pow(clickCostGrowth, clickLevel - 1));
     }
-
+    // ===== DRONE PURCHASE COST =====
     function getDroneCost() {
       return droneBaseCost * Math.pow(droneCostMultiplier, drones);
     }
-
+    // ===== DRONE DAMAGE UPGRADE COST =====
     function getDroneDamageUpgradeCost() {
       return Math.floor(
         droneDamageBaseCost * Math.pow(droneDamageGrowth, droneDamageLevel - 1)
       );
     }
-
+    // ===== DRONE FIRE RATE UPGRADE COST =====
     function getDroneFireRateUpgradeCost() {
       return Math.floor(
         droneFireRateBaseCost * Math.pow(droneFireRateGrowth, droneFireRateLevel - 1)
@@ -103,7 +105,7 @@ export default function Home() {
         spawnWeight: 5
       }
     ];
-
+    // ===== ASTEROID TYPE SELECTION =====
     function getRandomAsteroidType() {
       const totalWeight = ASTEROID_TYPES.reduce(
         (sum, t) => sum + t.spawnWeight,
@@ -134,7 +136,7 @@ export default function Home() {
 
       return points;
     }
-
+    // ===== ASTEROID CRACK GENERATION =====
     function generateCracks(size) {
       const cracks = [];
       const crackCount = Math.floor(Math.random() * 3) + 2; // 2–4 cracks
@@ -148,7 +150,22 @@ export default function Home() {
 
       return cracks;
     }
+    // ===== EXPLOSION EFFECT =====
+    function spawnExplosion(x, y, color) {
+      const particleCount = 12;
 
+      for (let i = 0; i < particleCount; i++) {
+        explosions.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 4,
+          vy: (Math.random() - 0.5) * 4,
+          life: 1,
+          color
+        });
+      }
+    }
+    // ===== ASTEROID SPAWNING =====
     function spawnAsteroid() {
       const size = Math.random() * 25 + 20;
       const typeData = getRandomAsteroidType();
@@ -207,14 +224,13 @@ export default function Home() {
           }
 
           // DAMAGE
-          const damage = droneDamage * drones;
+          const damage = droneDamage * droneUnits.length;
 
           ore += damage;
-
-          // APPLY DAMAGE
           target.hp -= damage;
 
           if (target.hp <= 0) {
+            spawnExplosion(target.x, target.y, target.color);
             ore += target.reward;
             asteroids = asteroids.filter(a => a !== target);
           }
@@ -235,6 +251,14 @@ export default function Home() {
         a.rotation += a.rotationSpeed;
       }
 
+      // explosions update
+      for (let p of explosions) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.03;
+      }
+
+      explosions = explosions.filter(p => p.life > 0);
       asteroids = asteroids.filter(a => a.y < canvas.height + 50);
 
       draw();
@@ -327,6 +351,14 @@ export default function Home() {
         ctx.restore();
       }
 
+      // ===== EXPLOSIONS =====
+      for (let p of explosions) {
+        ctx.fillStyle = `rgba(255, 180, 100, ${p.life})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // LASERS
       for (let l of lasers) {
         ctx.strokeStyle = `rgba(0, 255, 255, ${l.alpha})`;
@@ -363,6 +395,7 @@ export default function Home() {
           a.hp -= damage;
 
           if (a.hp <= 0) {
+            spawnExplosion(a.x, a.y, a.color);
             ore += a.reward;
             asteroids = asteroids.filter(x => x !== a);
           }
@@ -438,6 +471,10 @@ export default function Home() {
       }
     });
 
+    return () => {
+      window.removeEventListener("resize", resizeCanvas);
+      canvas.replaceWith(canvas.cloneNode(true));
+    };
   }, []);
 
   return (
