@@ -25,6 +25,7 @@ export default function Home() {
     let droneDamage = 1;
 
     let asteroids = [];
+    let lasers = [];
 
     // ===== ASTEROID CREATION =====
     function spawnAsteroid() {
@@ -52,9 +53,9 @@ export default function Home() {
     startSpawning();
 
     // ===== DRONE MINING =====
+
     function getClosestAsteroid() {
       if (asteroids.length === 0) return null;
-
       return asteroids.reduce((closest, a) =>
         a.y > closest.y ? a : closest
       );
@@ -65,6 +66,16 @@ export default function Home() {
         const target = getClosestAsteroid();
 
         if (target) {
+          // LASER EFFECT
+          lasers.push({
+            x1: canvas.width / 2,
+            y1: canvas.height - 50,
+            x2: target.x,
+            y2: target.y,
+            alpha: 1
+          });
+
+          // DAMAGE
           target.hp -= droneDamage * drones;
 
           if (target.hp <= 0) {
@@ -97,6 +108,7 @@ export default function Home() {
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      // ASTEROIDS
       for (let a of asteroids) {
         ctx.fillStyle = "gray";
         ctx.beginPath();
@@ -107,6 +119,20 @@ export default function Home() {
         ctx.font = "16px Arial";
         ctx.fillText(Math.floor(a.hp), a.x - 10, a.y + 5);
       }
+
+      // LASERS
+      for (let l of lasers) {
+        ctx.strokeStyle = `rgba(0, 255, 255, ${l.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+
+        l.alpha -= 0.05;
+      }
+
+      lasers = lasers.filter(l => l.alpha > 0);
     }
 
     update();
