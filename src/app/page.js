@@ -26,6 +26,27 @@ export default function Home() {
 
     let asteroids = [];
     let lasers = [];
+    let droneUnits = [];
+
+    // ===== CLICK UPGRADE STATE =====
+    let clickLevel = 1;
+    const clickBaseCost = 10;
+    const clickCostGrowth = 1.7;
+
+    // ===== DRONE PURCHASE STATE =====
+    const droneBaseCost = 100;
+    const droneCostMultiplier = 10;
+
+    // ===== DRONE DAMAGE UPGRADE =====
+    let droneDamageLevel = 1;
+    const droneDamageBaseCost = 250;
+    const droneDamageGrowth = 2;
+
+    // ===== DRONE FIRE RATE UPGRADE =====
+    let droneFireRate = 1000;
+    let droneFireRateLevel = 1;
+    const droneFireRateBaseCost = 500;
+    const droneFireRateGrowth = 2;
 
     // ===== SPACE STATION =====
     const station = {
@@ -36,6 +57,27 @@ export default function Home() {
       armWidth: 12,
       armLength: 60
     };
+
+    // ===== COST CALCULATION FUNCTIONS =====
+    function getClickUpgradeCost() {
+      return Math.floor(clickBaseCost * Math.pow(clickCostGrowth, clickLevel - 1));
+    }
+
+    function getDroneCost() {
+      return droneBaseCost * Math.pow(droneCostMultiplier, drones);
+    }
+
+    function getDroneDamageUpgradeCost() {
+      return Math.floor(
+        droneDamageBaseCost * Math.pow(droneDamageGrowth, droneDamageLevel - 1)
+      );
+    }
+
+    function getDroneFireRateUpgradeCost() {
+      return Math.floor(
+        droneFireRateBaseCost * Math.pow(droneFireRateGrowth, droneFireRateLevel - 1)
+      );
+    }
 
     // ===== ASTEROID TYPES =====
     const ASTEROID_TYPES = [
@@ -108,7 +150,9 @@ export default function Home() {
         maxHp: Math.floor(baseHp * typeData.hpMultiplier),
         speed: 0.8 + Math.random() * 1.2,
         reward: Math.floor(size * 0.5 * typeData.rewardMultiplier),
-        points: generateAsteroidShape(size) // ⭐ ADD THIS LINE
+        points: generateAsteroidShape(size),
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.01
       };
 
       asteroids.push(asteroid);
@@ -137,13 +181,15 @@ export default function Home() {
 
         if (target) {
           // LASER EFFECT
-          lasers.push({
-            x1: station.x(),
-            y1: station.y() - station.baseHeight - station.armLength,
-            x2: target.x,
-            y2: target.y,
-            alpha: 1
-          });
+          for (let d of droneUnits) {
+            lasers.push({
+              x1: d.x,
+              y1: d.y,
+              x2: target.x,
+              y2: target.y,
+              alpha: 1
+            });
+          }
 
           // DAMAGE
           const damage = droneDamage * drones;
@@ -162,7 +208,7 @@ export default function Home() {
         }
       }
 
-      setTimeout(droneAttack, 1000);
+      setTimeout(droneAttack, droneFireRate);
     }
 
     droneAttack();
@@ -171,6 +217,7 @@ export default function Home() {
     function update() {
       for (let a of asteroids) {
         a.y += a.speed;
+        a.rotation += a.rotationSpeed;
       }
 
       asteroids = asteroids.filter(a => a.y < canvas.height + 50);
@@ -192,14 +239,6 @@ export default function Home() {
         station.baseHeight
       );
 
-      // ===== DRAW STATION ARM =====
-      ctx.fillStyle = "#777";
-      ctx.fillRect(
-        station.x() - station.armWidth / 2,
-        station.y() - station.baseHeight - station.armLength,
-        station.armWidth,
-        station.armLength
-      );
       // ===== DRAW BASE SUPPORTS =====
       ctx.strokeStyle = "#555";
       ctx.lineWidth = 1;
@@ -211,26 +250,38 @@ export default function Home() {
         ctx.stroke();
       }
 
-      // ===== ARM TIP =====
-      ctx.fillStyle = "#aaa";
-      ctx.beginPath();
-      ctx.arc(
-        station.x(),
-        station.y() - station.baseHeight - station.armLength,
-        6,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
+      // ===== DRAW DRONES =====
+      for (let d of droneUnits) {
+        // hover motion
+        const hoverY = d.y + Math.sin(Date.now() / 500 + d.hoverOffset) * 5;
+
+        // body
+        ctx.fillStyle = "#0ff";
+        ctx.beginPath();
+        ctx.arc(d.x, hoverY, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // wings
+        ctx.strokeStyle = "#0aa";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(d.x - 10, hoverY);
+        ctx.lineTo(d.x + 10, hoverY);
+        ctx.stroke();
+      }
 
       // ASTEROIDS
       for (let a of asteroids) {
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        ctx.rotate(a.rotation);
+
         ctx.fillStyle = a.color;
         ctx.beginPath();
 
         a.points.forEach((p, index) => {
-          const px = a.x + Math.cos(p.angle) * p.radius;
-          const py = a.y + Math.sin(p.angle) * p.radius;
+          const px = Math.cos(p.angle) * p.radius;
+          const py = Math.sin(p.angle) * p.radius;
 
           if (index === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
@@ -238,6 +289,7 @@ export default function Home() {
 
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
 
         ctx.fillStyle = "white";
         ctx.font = "16px Arial";
@@ -295,20 +347,62 @@ export default function Home() {
       document.getElementById("oreDisplay").textContent = ore;
       document.getElementById("clickPowerDisplay").textContent = clickPower;
       document.getElementById("droneCountDisplay").textContent = drones;
+      document.getElementById("upgradeClick").textContent =
+        `Upgrade Click (${getClickUpgradeCost()} ore)`;
+
+      document.getElementById("buyDrone").textContent =
+        `Buy Drone (${getDroneCost()} ore)`;
+
+      document.getElementById("upgradeDroneDamage").textContent =
+        `Upgrade Drone Damage (${getDroneDamageUpgradeCost()} ore)`;
+
+      document.getElementById("upgradeDroneFireRate").textContent =
+        `Upgrade Drone Speed (${getDroneFireRateUpgradeCost()} ore)`;
     }
 
     document.getElementById("upgradeClick").addEventListener("click", () => {
-      if (ore >= 20) {
-        ore -= 20;
+      const cost = getClickUpgradeCost();
+      if (ore >= cost) {
+        ore -= cost;
+        clickLevel++;
         clickPower++;
         updateUI();
       }
     });
 
     document.getElementById("buyDrone").addEventListener("click", () => {
-      if (ore >= 50) {
-        ore -= 50;
+      const cost = getDroneCost();
+      if (ore >= cost) {
+        ore -= cost;
         drones++;
+
+        // CREATE A DRONE UNIT
+        droneUnits.push({
+          x: canvas.width / 2 + (Math.random() * 100 - 50),
+          y: canvas.height - 120 - droneUnits.length * 25,
+          hoverOffset: Math.random() * Math.PI * 2
+        });
+
+        updateUI();
+      }
+    });
+
+    document.getElementById("upgradeDroneDamage").addEventListener("click", () => {
+      const cost = getDroneDamageUpgradeCost();
+      if (ore >= cost) {
+        ore -= cost;
+        droneDamage++;
+        droneDamageLevel++;
+        updateUI();
+      }
+    });
+
+    document.getElementById("upgradeDroneFireRate").addEventListener("click", () => {
+      const cost = getDroneFireRateUpgradeCost();
+      if (ore >= cost && droneFireRate > 200) {
+        ore -= cost;
+        droneFireRate -= 150;
+        droneFireRateLevel++;
         updateUI();
       }
     });
@@ -329,6 +423,8 @@ export default function Home() {
 
         <button id="upgradeClick">Upgrade Click Power</button>
         <button id="buyDrone">Buy Drone</button>
+        <button id="upgradeDroneDamage">Upgrade Drone Damage</button>
+        <button id="upgradeDroneFireRate">Upgrade Drone Speed</button>
 
         <p>Click Power: <span id="clickPowerDisplay">1</span></p>
         <p>Drones: <span id="droneCountDisplay">0</span></p>
