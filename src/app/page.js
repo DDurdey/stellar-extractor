@@ -156,7 +156,7 @@ export default function Home() {
 
       // ASTEROIDS
       for (let a of asteroids) {
-        ctx.fillStyle = "gray";
+        ctx.fillStyle = a.color;
         ctx.beginPath();
         ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
         ctx.fill();
