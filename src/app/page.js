@@ -27,26 +27,36 @@ export default function Home() {
     let asteroids = [];
     let lasers = [];
 
+    // ===== SPACE STATION =====
+    const station = {
+      x: () => canvas.width / 2,
+      y: () => canvas.height,
+      baseWidth: () => canvas.width,
+      baseHeight: 30,
+      armWidth: 12,
+      armLength: 60
+    };
+
     // ===== ASTEROID TYPES =====
     const ASTEROID_TYPES = [
       {
         type: "iron",
         color: "#888",
-        hpMultiplier: 1,
+        hpMultiplier: 2,
         rewardMultiplier: 1,
         spawnWeight: 70
       },
       {
         type: "titanium",
         color: "#5dade2",
-        hpMultiplier: 1.8,
+        hpMultiplier: 5,
         rewardMultiplier: 2.5,
         spawnWeight: 25
       },
       {
         type: "platinum",
         color: "#e5e4e2",
-        hpMultiplier: 3,
+        hpMultiplier: 10,
         rewardMultiplier: 6,
         spawnWeight: 5
       }
@@ -69,6 +79,19 @@ export default function Home() {
     }
 
     // ===== ASTEROID CREATION =====
+
+    function generateAsteroidShape(size) {
+      const points = [];
+      const vertexCount = Math.floor(Math.random() * 5) + 7; // 7–11 points
+
+      for (let i = 0; i < vertexCount; i++) {
+        const angle = (Math.PI * 2 / vertexCount) * i;
+        const radius = size * (0.7 + Math.random() * 0.4);
+        points.push({ angle, radius });
+      }
+
+      return points;
+    }
     function spawnAsteroid() {
       const size = Math.random() * 25 + 20;
       const typeData = getRandomAsteroidType();
@@ -84,7 +107,8 @@ export default function Home() {
         hp: Math.floor(baseHp * typeData.hpMultiplier),
         maxHp: Math.floor(baseHp * typeData.hpMultiplier),
         speed: 0.8 + Math.random() * 1.2,
-        reward: Math.floor(size * 0.5 * typeData.rewardMultiplier)
+        reward: Math.floor(size * 0.5 * typeData.rewardMultiplier),
+        points: generateAsteroidShape(size) // ⭐ ADD THIS LINE
       };
 
       asteroids.push(asteroid);
@@ -114,15 +138,20 @@ export default function Home() {
         if (target) {
           // LASER EFFECT
           lasers.push({
-            x1: canvas.width / 2,
-            y1: canvas.height - 50,
+            x1: station.x(),
+            y1: station.y() - station.baseHeight - station.armLength,
             x2: target.x,
             y2: target.y,
             alpha: 1
           });
 
           // DAMAGE
-          target.hp -= droneDamage * drones;
+          const damage = droneDamage * drones;
+
+          ore += damage;
+
+          // APPLY DAMAGE
+          target.hp -= damage;
 
           if (target.hp <= 0) {
             ore += target.reward;
@@ -154,11 +183,60 @@ export default function Home() {
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      // ===== DRAW SPACE STATION BASE =====
+      ctx.fillStyle = "#444";
+      ctx.fillRect(
+        0,
+        station.y() - station.baseHeight,
+        station.baseWidth(),
+        station.baseHeight
+      );
+
+      // ===== DRAW STATION ARM =====
+      ctx.fillStyle = "#777";
+      ctx.fillRect(
+        station.x() - station.armWidth / 2,
+        station.y() - station.baseHeight - station.armLength,
+        station.armWidth,
+        station.armLength
+      );
+      // ===== DRAW BASE SUPPORTS =====
+      ctx.strokeStyle = "#555";
+      ctx.lineWidth = 1;
+
+      for (let x = 0; x < canvas.width; x += 80) {
+        ctx.beginPath();
+        ctx.moveTo(x, station.y() - station.baseHeight);
+        ctx.lineTo(x, station.y());
+        ctx.stroke();
+      }
+
+      // ===== ARM TIP =====
+      ctx.fillStyle = "#aaa";
+      ctx.beginPath();
+      ctx.arc(
+        station.x(),
+        station.y() - station.baseHeight - station.armLength,
+        6,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+
       // ASTEROIDS
       for (let a of asteroids) {
         ctx.fillStyle = a.color;
         ctx.beginPath();
-        ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
+
+        a.points.forEach((p, index) => {
+          const px = a.x + Math.cos(p.angle) * p.radius;
+          const py = a.y + Math.sin(p.angle) * p.radius;
+
+          if (index === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+
+        ctx.closePath();
         ctx.fill();
 
         ctx.fillStyle = "white";
@@ -195,8 +273,11 @@ export default function Home() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < a.size) {
-          a.hp -= clickPower;
-          ore += 1;
+          const damage = clickPower;
+
+          ore += damage;
+
+          a.hp -= damage;
 
           if (a.hp <= 0) {
             ore += a.reward;
