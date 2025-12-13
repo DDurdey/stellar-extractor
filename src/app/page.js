@@ -134,10 +134,24 @@ export default function Home() {
 
       return points;
     }
+
+    function generateCracks(size) {
+      const cracks = [];
+      const crackCount = Math.floor(Math.random() * 3) + 2; // 2–4 cracks
+
+      for (let i = 0; i < crackCount; i++) {
+        cracks.push({
+          angle: Math.random() * Math.PI * 2,
+          length: size * (0.4 + Math.random() * 0.4)
+        });
+      }
+
+      return cracks;
+    }
+
     function spawnAsteroid() {
       const size = Math.random() * 25 + 20;
       const typeData = getRandomAsteroidType();
-
       const baseHp = Math.floor(size * 1.5);
 
       const asteroid = {
@@ -151,6 +165,7 @@ export default function Home() {
         speed: 0.8 + Math.random() * 1.2,
         reward: Math.floor(size * 0.5 * typeData.rewardMultiplier),
         points: generateAsteroidShape(size),
+        cracks: generateCracks(size),            // ✅ HERE
         rotation: Math.random() * Math.PI * 2,
         rotationSpeed: (Math.random() - 0.5) * 0.01
       };
@@ -276,6 +291,7 @@ export default function Home() {
         ctx.translate(a.x, a.y);
         ctx.rotate(a.rotation);
 
+        // ===== ASTEROID BODY =====
         ctx.fillStyle = a.color;
         ctx.beginPath();
 
@@ -289,11 +305,26 @@ export default function Home() {
 
         ctx.closePath();
         ctx.fill();
-        ctx.restore();
 
-        ctx.fillStyle = "white";
-        ctx.font = "16px Arial";
-        ctx.fillText(Math.floor(a.hp), a.x - 10, a.y + 5);
+        // ===== CRACKS =====
+        const damageRatio = 1 - a.hp / a.maxHp;
+
+        if (damageRatio > 0.1) {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${damageRatio})`;
+          ctx.lineWidth = 1.5;
+
+          for (let c of a.cracks) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(
+              Math.cos(c.angle) * c.length * damageRatio,
+              Math.sin(c.angle) * c.length * damageRatio
+            );
+            ctx.stroke();
+          }
+        }
+
+        ctx.restore();
       }
 
       // LASERS
