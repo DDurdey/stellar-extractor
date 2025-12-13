@@ -27,18 +27,64 @@ export default function Home() {
     let asteroids = [];
     let lasers = [];
 
+    // ===== ASTEROID TYPES =====
+    const ASTEROID_TYPES = [
+      {
+        type: "iron",
+        color: "#888",
+        hpMultiplier: 1,
+        rewardMultiplier: 1,
+        spawnWeight: 70
+      },
+      {
+        type: "titanium",
+        color: "#5dade2",
+        hpMultiplier: 1.8,
+        rewardMultiplier: 2.5,
+        spawnWeight: 25
+      },
+      {
+        type: "platinum",
+        color: "#e5e4e2",
+        hpMultiplier: 3,
+        rewardMultiplier: 6,
+        spawnWeight: 5
+      }
+    ];
+
+    function getRandomAsteroidType() {
+      const totalWeight = ASTEROID_TYPES.reduce(
+        (sum, t) => sum + t.spawnWeight,
+        0
+      );
+
+      let roll = Math.random() * totalWeight;
+
+      for (let t of ASTEROID_TYPES) {
+        roll -= t.spawnWeight;
+        if (roll <= 0) return t;
+      }
+
+      return ASTEROID_TYPES[0];
+    }
+
     // ===== ASTEROID CREATION =====
     function spawnAsteroid() {
       const size = Math.random() * 25 + 20;
+      const typeData = getRandomAsteroidType();
+
+      const baseHp = Math.floor(size * 1.5);
 
       const asteroid = {
         x: Math.random() * canvas.width,
         y: -size,
         size: size,
-        hp: Math.floor(size * 1.5),
-        maxHp: Math.floor(size * 1.5),
+        type: typeData.type,
+        color: typeData.color,
+        hp: Math.floor(baseHp * typeData.hpMultiplier),
+        maxHp: Math.floor(baseHp * typeData.hpMultiplier),
         speed: 0.8 + Math.random() * 1.2,
-        reward: Math.floor(size * 0.5)
+        reward: Math.floor(size * 0.5 * typeData.rewardMultiplier)
       };
 
       asteroids.push(asteroid);
