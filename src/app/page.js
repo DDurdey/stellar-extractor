@@ -1,65 +1,191 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef } from "react";
 
 export default function Home() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    // ===== CANVAS SETUP =====
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth - 250;
+      canvas.height = window.innerHeight;
+    }
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    // ===== GAME STATE =====
+    let ore = 0;
+    let clickPower = 1;
+    let drones = 0;
+    let droneDamage = 1;
+
+    let asteroids = [];
+
+    // ===== ASTEROID CREATION =====
+    function spawnAsteroid() {
+      const size = Math.random() * 25 + 20;
+
+      const asteroid = {
+        x: Math.random() * canvas.width,
+        y: -size,
+        size: size,
+        hp: Math.floor(size * 1.5),
+        maxHp: Math.floor(size * 1.5),
+        speed: 0.8 + Math.random() * 1.2,
+        reward: Math.floor(size * 0.5)
+      };
+
+      asteroids.push(asteroid);
+    }
+
+    function startSpawning() {
+      spawnAsteroid();
+      const nextSpawn = 700 + Math.random() * 1500;
+      setTimeout(startSpawning, nextSpawn);
+    }
+
+    startSpawning();
+
+    // ===== DRONE MINING =====
+    function getClosestAsteroid() {
+      if (asteroids.length === 0) return null;
+
+      return asteroids.reduce((closest, a) =>
+        a.y > closest.y ? a : closest
+      );
+    }
+
+    function droneAttack() {
+      if (drones > 0) {
+        const target = getClosestAsteroid();
+
+        if (target) {
+          target.hp -= droneDamage * drones;
+
+          if (target.hp <= 0) {
+            ore += target.reward;
+            asteroids = asteroids.filter(a => a !== target);
+          }
+
+          updateUI();
+        }
+      }
+
+      setTimeout(droneAttack, 1000);
+    }
+
+    droneAttack();
+
+    // ===== GAME LOOP =====
+    function update() {
+      for (let a of asteroids) {
+        a.y += a.speed;
+      }
+
+      asteroids = asteroids.filter(a => a.y < canvas.height + 50);
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    // ===== DRAWING =====
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let a of asteroids) {
+        ctx.fillStyle = "gray";
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+        ctx.fillText(Math.floor(a.hp), a.x - 10, a.y + 5);
+      }
+    }
+
+    update();
+
+    // ===== CLICKING =====
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      for (let a of asteroids) {
+        const dx = mx - a.x;
+        const dy = my - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < a.size) {
+          a.hp -= clickPower;
+          ore += 1;
+
+          if (a.hp <= 0) {
+            ore += a.reward;
+            asteroids = asteroids.filter(x => x !== a);
+          }
+
+          updateUI();
+          return;
+        }
+      }
+    });
+
+    // ===== UI UPDATES =====
+    function updateUI() {
+      document.getElementById("oreDisplay").textContent = ore;
+      document.getElementById("clickPowerDisplay").textContent = clickPower;
+      document.getElementById("droneCountDisplay").textContent = drones;
+    }
+
+    document.getElementById("upgradeClick").addEventListener("click", () => {
+      if (ore >= 20) {
+        ore -= 20;
+        clickPower++;
+        updateUI();
+      }
+    });
+
+    document.getElementById("buyDrone").addEventListener("click", () => {
+      if (ore >= 50) {
+        ore -= 50;
+        drones++;
+        updateUI();
+      }
+    });
+
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div style={{ display: "flex" }}>
+      <div style={{
+        width: "250px",
+        background: "#111",
+        color: "white",
+        padding: "20px"
+      }}>
+        <h1>Stellar Extractor</h1>
+
+        <p>Ore: <span id="oreDisplay">0</span></p>
+
+        <button id="upgradeClick">Upgrade Click Power</button>
+        <button id="buyDrone">Buy Drone</button>
+
+        <p>Click Power: <span id="clickPowerDisplay">1</span></p>
+        <p>Drones: <span id="droneCountDisplay">0</span></p>
+      </div>
+
+      <canvas
+        ref={canvasRef}
+        id="gameCanvas"
+        style={{ background: "black" }}
+      />
     </div>
   );
 }
