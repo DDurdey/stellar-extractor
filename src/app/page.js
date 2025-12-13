@@ -2,10 +2,17 @@
 
 import { useEffect, useRef } from "react";
 
+// ===== FIREBASE IMPORTS =====
+import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+
+
 export default function Home() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+
     // ===== CANVAS SETUP =====
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
@@ -23,12 +30,68 @@ export default function Home() {
     let clickPower = 1;
     let drones = 0;
     let droneDamage = 1;
-
+    let currentSector = 1;
 
     let asteroids = [];
     let lasers = [];
     let explosions = [];
     let droneUnits = [];
+
+    let userId = null;
+
+    signInAnonymously(auth).catch(console.error);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      userId = user.uid;
+      await loadGame(userId);
+    });
+
+    async function saveGame(uid) {
+      if (!uid) return;
+
+      await setDoc(doc(db, "users", uid), {
+        ore,
+        clickPower,
+        clickLevel,
+        drones,
+        droneDamage,
+        droneDamageLevel,
+        droneFireRate,
+        droneFireRateLevel,
+        currentSector,
+        lastSave: Date.now()
+      });
+    }
+
+    async function loadGame(uid) {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+
+      ore = data.ore ?? ore;
+      clickPower = data.clickPower ?? clickPower;
+      drones = data.drones ?? drones;
+      droneUnits = [];
+
+      for (let i = 0; i < drones; i++) {
+        droneUnits.push({
+          x: canvas.width / 2 + (Math.random() * 100 - 50),
+          y: canvas.height - 120 - i * 25,
+          hoverOffset: Math.random() * Math.PI * 2
+        });
+      }
+      droneDamage = data.droneDamage ?? droneDamage;
+      droneFireRate = data.droneFireRate ?? droneFireRate;
+      currentSector = data.currentSector ?? currentSector;
+      clickLevel = data.clickLevel ?? clickLevel;
+      droneDamageLevel = data.droneDamageLevel ?? droneDamageLevel;
+      droneFireRateLevel = data.droneFireRateLevel ?? droneFireRateLevel;
+
+      updateUI();
+    }
 
     // ===== CLICK UPGRADE STATE =====
     let clickLevel = 1;
@@ -107,19 +170,17 @@ export default function Home() {
     ];
     // ===== ASTEROID TYPE SELECTION =====
     function getRandomAsteroidType() {
-      const totalWeight = ASTEROID_TYPES.reduce(
-        (sum, t) => sum + t.spawnWeight,
-        0
-      );
+      const types = SECTORS[currentSector].asteroidTypes;
 
+      const totalWeight = types.reduce((sum, t) => sum + t.spawnWeight, 0);
       let roll = Math.random() * totalWeight;
 
-      for (let t of ASTEROID_TYPES) {
+      for (let t of types) {
         roll -= t.spawnWeight;
         if (roll <= 0) return t;
       }
 
-      return ASTEROID_TYPES[0];
+      return types[0];
     }
 
     // ===== ASTEROID CREATION =====
@@ -165,6 +226,36 @@ export default function Home() {
         });
       }
     }
+
+    // ===== SECTOR DEFINITIONS =====
+    const SECTORS = {
+      1: {
+        name: "Outer Belt",
+        background: "#000000",
+        starColor: "#666",
+        asteroidSpeedMultiplier: 1,
+        spawnDelayMin: 700,
+        spawnDelayMax: 1500,
+        asteroidTypes: [
+          { ...ASTEROID_TYPES[0] },
+          { ...ASTEROID_TYPES[1] }
+        ]
+      },
+      2: {
+        name: "Inner Belt",
+        background: "#050014",
+        starColor: "#9b59b6",
+        asteroidSpeedMultiplier: 1.4,
+        spawnDelayMin: 900,
+        spawnDelayMax: 2000,
+        asteroidTypes: [
+          { ...ASTEROID_TYPES[0], spawnWeight: 40 },
+          { ...ASTEROID_TYPES[1], spawnWeight: 40 },
+          { ...ASTEROID_TYPES[2], spawnWeight: 20 }
+        ]
+      }
+    };
+
     // ===== ASTEROID SPAWNING =====
     function spawnAsteroid() {
       const size = Math.random() * 25 + 20;
@@ -179,7 +270,9 @@ export default function Home() {
         color: typeData.color,
         hp: Math.floor(baseHp * typeData.hpMultiplier),
         maxHp: Math.floor(baseHp * typeData.hpMultiplier),
-        speed: 0.8 + Math.random() * 1.2,
+        speed:
+          (0.8 + Math.random() * 1.2) *
+          SECTORS[currentSector].asteroidSpeedMultiplier,
         reward: Math.floor(size * 0.5 * typeData.rewardMultiplier),
         points: generateAsteroidShape(size),
         cracks: generateCracks(size),            // ✅ HERE
@@ -192,7 +285,10 @@ export default function Home() {
 
     function startSpawning() {
       spawnAsteroid();
-      const nextSpawn = 700 + Math.random() * 1500;
+      const sector = SECTORS[currentSector];
+      const nextSpawn =
+        sector.spawnDelayMin +
+        Math.random() * (sector.spawnDelayMax - sector.spawnDelayMin);
       setTimeout(startSpawning, nextSpawn);
     }
 
@@ -224,7 +320,8 @@ export default function Home() {
           }
 
           // DAMAGE
-          const damage = droneDamage * droneUnits.length;
+          const automationBonus = currentSector >= 2 ? 1.5 : 1;
+          const damage = droneDamage * droneUnits.length * automationBonus;
 
           ore += damage;
           target.hp -= damage;
@@ -267,7 +364,8 @@ export default function Home() {
 
     // ===== DRAWING =====
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = SECTORS[currentSector].background;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // ===== DRAW SPACE STATION BASE =====
       ctx.fillStyle = "#444";
@@ -378,6 +476,8 @@ export default function Home() {
 
     // ===== CLICKING =====
     canvas.addEventListener("click", (e) => {
+      if (currentSector >= 2) return;
+
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -391,7 +491,6 @@ export default function Home() {
           const damage = clickPower;
 
           ore += damage;
-
           a.hp -= damage;
 
           if (a.hp <= 0) {
@@ -422,9 +521,27 @@ export default function Home() {
 
       document.getElementById("upgradeDroneFireRate").textContent =
         `Upgrade Drone Speed (${getDroneFireRateUpgradeCost()} ore)`;
+
+      document.getElementById("sectorDisplay").textContent =
+        `${currentSector} (${SECTORS[currentSector].name})`;
+
+      document.getElementById("nextSector").textContent =
+        currentSector === 1
+          ? "Travel to Inner Belt (5000 ore)"
+          : "Max Sector Reached";
+
+      if (currentSector >= 2) {
+        document.getElementById("clickPowerDisplay").textContent = "Disabled";
+        document.getElementById("upgradeClick").disabled = true;
+        document.getElementById("upgradeClick").textContent = "Manual Mining Offline";
+      } else {
+        document.getElementById("upgradeClick").disabled = false;
+      }
     }
 
     document.getElementById("upgradeClick").addEventListener("click", () => {
+      if (currentSector >= 2) return;
+
       const cost = getClickUpgradeCost();
       if (ore >= cost) {
         ore -= cost;
@@ -448,6 +565,7 @@ export default function Home() {
         });
 
         updateUI();
+        if (userId) saveGame(userId);
       }
     });
 
@@ -471,10 +589,31 @@ export default function Home() {
       }
     });
 
+    document.getElementById("nextSector").addEventListener("click", () => {
+      if (currentSector === 1 && ore >= 5000) {
+        ore -= 5000;
+        currentSector = 2;
+
+        // CLEAR OLD AREA
+        asteroids = [];
+        lasers = [];
+        explosions = [];
+
+        updateUI();
+      }
+    });
+    // ===== AUTO SAVE =====
+    setInterval(() => {
+      if (auth.currentUser) {
+        saveGame(auth.currentUser.uid);
+      }
+    }, 15000);
+
     return () => {
       window.removeEventListener("resize", resizeCanvas);
       canvas.replaceWith(canvas.cloneNode(true));
     };
+
   }, []);
 
   return (
@@ -496,6 +635,8 @@ export default function Home() {
 
         <p>Click Power: <span id="clickPowerDisplay">1</span></p>
         <p>Drones: <span id="droneCountDisplay">0</span></p>
+        <button id="nextSector">Travel to Next Sector</button>
+        <p>Current Sector: <span id="sectorDisplay">1</span></p>
       </div>
 
       <canvas
