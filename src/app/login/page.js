@@ -1,12 +1,10 @@
+export const dynamic = "force-dynamic";
+export const runtime = "edge";
+
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
-
-import { auth } from "@/lib/firebase";
-
-export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -22,10 +20,13 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
+            const { auth } = await import("@/lib/firebase");
+            const { signInWithEmailAndPassword } = await import("firebase/auth");
+
             await signInWithEmailAndPassword(auth, email, password);
-            router.push("/"); // go to game
+            router.push("/");
         } catch (err) {
-            setError(err.message);
+            setError(err.message ?? "Login failed");
             setLoading(false);
         }
     }
