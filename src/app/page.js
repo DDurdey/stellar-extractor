@@ -72,18 +72,6 @@ export default function Home() {
 
     let removeResize = null;
 
-    let passiveIncomeInterval = null;
-
-    function startPassiveIncome() {
-      if (passiveIncomeInterval) return;
-
-      passiveIncomeInterval = setInterval(() => {
-        const incomePerSecond = getTotalOrePerSecond();
-        ore += incomePerSecond;
-        updateUI();
-      }, 1000);
-    }
-
     async function ensureSaveExists(uid) {
       const userRef = doc(db, "users", uid);
       const snap = await getDoc(userRef);
@@ -157,6 +145,8 @@ export default function Home() {
       // SHARED GAME STATE
       // =========================
       let ore = 0;
+      let passiveIncomeInterval = null;
+      let oreFloatBuffer = 0;
 
       let currentSector = 1;
       let unlockedSectors = [1];
@@ -616,6 +606,23 @@ export default function Home() {
 
       function getDroneOrePerMinute() {
         return getDroneOrePerSecond() * 60 * GLOBAL_INCOME_MULTIPLIER;
+      }
+      function startPassiveIncome() {
+        if (passiveIncomeInterval) return;
+
+        passiveIncomeInterval = setInterval(() => {
+          const incomePerSecond = getTotalOrePerSecond();
+
+          oreFloatBuffer += incomePerSecond;
+
+          const wholeOre = Math.floor(oreFloatBuffer);
+          if (wholeOre > 0) {
+            ore += wholeOre;
+            oreFloatBuffer -= wholeOre;
+          }
+
+          updateUI();
+        }, 1000);
       }
 
       function getTruckOrePerMinute() {
