@@ -31,7 +31,6 @@ export default function LoginPage() {
     return (
         <div style={{ minHeight: "100vh", background: "#0b0b0b", color: "white", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
             <h1>Stellar Extractor</h1>
-            <h2>Login</h2>
 
             <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px", width: "260px" }}>
                 <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -42,6 +41,23 @@ export default function LoginPage() {
             </form>
 
             {error && <p style={{ color: "#ff6b6b" }}>{error}</p>}
+
+            <p style={{ marginTop: "16px", fontSize: "14px" }}>
+                Don’t have an account?{" "}
+                <button
+                    onClick={() => router.push("/signup")}
+                    style={{
+                        background: "none",
+                        border: "none",
+                        color: "#1abc9c",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        padding: 0
+                    }}
+                >
+                    Sign up
+                </button>
+            </p>
         </div>
     );
 }

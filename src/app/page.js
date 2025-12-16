@@ -70,6 +70,8 @@ export default function Home() {
     let handleUpTruckUnload = null;
     let handleUpTruckTravel = null;
 
+    let passiveIncomeInterval = null;
+
     let removeResize = null;
 
     async function ensureSaveExists(uid) {
@@ -1273,7 +1275,10 @@ export default function Home() {
       if (droneTimeoutId) clearTimeout(droneTimeoutId);
       if (autoSaveIntervalId) clearInterval(autoSaveIntervalId);
       if (rafId) cancelAnimationFrame(rafId);
-      if (passiveIncomeInterval) clearInterval(passiveIncomeInterval);
+      if (passiveIncomeInterval) {
+        clearInterval(passiveIncomeInterval);
+        passiveIncomeInterval = null;
+      }
 
       removeResize?.();
 
