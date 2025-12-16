@@ -51,6 +51,8 @@ export default function Home() {
 
     let handleCanvasClick = null;
     let handleUpgradeClick = null;
+    let upgradeSpawnRateBtn = null;
+    let handleUpgradeSpawnRate = null;
     let handleBuyDrone = null;
     let handleUpgradeDroneDamage = null;
     let handleUpgradeDroneFireRate = null;
@@ -87,6 +89,7 @@ export default function Home() {
           droneDamageLevel: 1,
           droneFireRate: 1000,
           droneFireRateLevel: 1,
+          spawnRateLevel: 0,
 
           // sector 2
           truckCounts: { small: 0, medium: 0, large: 0 },
@@ -146,11 +149,21 @@ export default function Home() {
 
       const GLOBAL_INCOME_MULTIPLIER = 0.65;
 
+      const stars = Array.from({ length: 120 }, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        size: Math.random() * 1.5 + 0.5,
+        speed: Math.random() * 0.15 + 0.05,
+        alpha: Math.random() * 0.6 + 0.2,
+      }));
+
       // =========================
       // SECTOR 1 STATE
       // =========================
       let clickPower = 1;
       let clickLevel = 1;
+
+      let spawnRateLevel = 0;
 
       let drones = 0;
       let droneDamage = 1;
@@ -266,6 +279,7 @@ export default function Home() {
             droneDamageLevel,
             droneFireRate,
             droneFireRateLevel,
+            spawnRateLevel,
 
             // sector 2
             truckCounts,
@@ -300,6 +314,7 @@ export default function Home() {
 
         droneFireRate = data.droneFireRate ?? droneFireRate;
         droneFireRateLevel = data.droneFireRateLevel ?? droneFireRateLevel;
+        spawnRateLevel = data.spawnRateLevel ?? spawnRateLevel;
 
         // sector 2
         truckCounts = data.truckCounts ?? truckCounts;
@@ -341,6 +356,9 @@ export default function Home() {
       const droneFireRateBaseCost = 500;
       const droneFireRateGrowth = 2;
 
+      const spawnRateBaseCost = 750;
+      const spawnRateGrowth = 2.2;
+
       function getClickUpgradeCost() {
         return Math.floor(clickBaseCost * Math.pow(clickCostGrowth, clickLevel - 1));
       }
@@ -352,6 +370,12 @@ export default function Home() {
       }
       function getDroneFireRateUpgradeCost() {
         return Math.floor(droneFireRateBaseCost * Math.pow(droneFireRateGrowth, droneFireRateLevel - 1));
+      }
+
+      function getSpawnRateUpgradeCost() {
+        return Math.floor(
+          spawnRateBaseCost * Math.pow(spawnRateGrowth, spawnRateLevel)
+        );
       }
 
       const ASTEROID_TYPES = [
@@ -455,8 +479,12 @@ export default function Home() {
 
         spawnAsteroid();
         const sector = SECTORS[1];
-        const nextSpawn =
-          sector.spawnDelayMin + Math.random() * (sector.spawnDelayMax - sector.spawnDelayMin);
+        const spawnMultiplier = 1 / (1 + spawnRateLevel * 0.25);
+
+        const min = Math.max(200, sector.spawnDelayMin * spawnMultiplier);
+        const max = Math.max(400, sector.spawnDelayMax * spawnMultiplier);
+
+        const nextSpawn = min + Math.random() * (max - min);
 
         spawnTimeoutId = window.setTimeout(startSpawning, nextSpawn);
       }
@@ -574,7 +602,7 @@ export default function Home() {
       }
 
       function getDroneOrePerMinute() {
-        return getDroneOrePerSecond() * 60;
+        return getDroneOrePerSecond() * 60 * GLOBAL_INCOME_MULTIPLIER;
       }
 
       function getTruckOrePerMinute() {
@@ -583,7 +611,7 @@ export default function Home() {
           const count = truckCounts[typeId] || 0;
           total += count * getTruckOrePerSecond(typeId);
         }
-        return total * 60;
+        return total * 60 * GLOBAL_INCOME_MULTIPLIER;
       }
 
       function getTotalOrePerMinute() {
@@ -605,7 +633,7 @@ export default function Home() {
       }
 
       function getTruckUpgradeCost(kind) {
-        const base = kind === "gather" ? 1500 : kind === "unload" ? 1200 : 1000;
+        const base = kind === "gather" ? 150000 : kind === "unload" ? 120000 : 100000;
         const lvl =
           kind === "gather" ? truckGatherLevel : kind === "unload" ? truckUnloadLevel : truckTravelLevel;
         return Math.floor(base * Math.pow(1.6, lvl));
@@ -635,6 +663,11 @@ export default function Home() {
         const buyDroneEl = document.getElementById("buyDrone");
         const upDmgEl = document.getElementById("upgradeDroneDamage");
         const upRateEl = document.getElementById("upgradeDroneFireRate");
+        const upSpawnEl = document.getElementById("upgradeSpawnRate");
+        if (upSpawnEl) {
+          upSpawnEl.textContent =
+            `Upgrade Asteroid Spawn (${getSpawnRateUpgradeCost()} ore) Lv ${spawnRateLevel}`;
+        }
 
         // Sector switching
         const goSector2Btn = document.getElementById("goSector2");
@@ -753,6 +786,7 @@ export default function Home() {
       const buyDroneBtn = document.getElementById("buyDrone");
       const upgradeDroneDamageBtn = document.getElementById("upgradeDroneDamage");
       const upgradeDroneFireRateBtn = document.getElementById("upgradeDroneFireRate");
+      upgradeSpawnRateBtn = document.getElementById("upgradeSpawnRate");
 
       const goSector1Btn = document.getElementById("goSector1");
       const goSector2Btn = document.getElementById("goSector2");
@@ -819,10 +853,25 @@ export default function Home() {
         }
       };
 
+      handleUpgradeSpawnRate = () => {
+        if (currentSector !== 1) return;
+
+        const cost = getSpawnRateUpgradeCost();
+        if (ore >= cost) {
+          ore -= cost;
+          spawnRateLevel++;
+          updateUI();
+          saveGame();
+        }
+      };
+
+
       upgradeClickBtn?.addEventListener("click", handleUpgradeClick);
       buyDroneBtn?.addEventListener("click", handleBuyDrone);
       upgradeDroneDamageBtn?.addEventListener("click", handleUpgradeDroneDamage);
       upgradeDroneFireRateBtn?.addEventListener("click", handleUpgradeDroneFireRate);
+      upgradeSpawnRateBtn?.addEventListener("click", handleUpgradeSpawnRate);
+
 
       handleGoSector1 = () => switchSector(1);
 
@@ -904,8 +953,18 @@ export default function Home() {
           p.life -= 0.03;
         }
 
+        // Laser decay & cleanup
+        for (let l of lasers) {
+          l.alpha -= 0.05;
+        }
+        lasers = lasers.filter((l) => l.alpha > 0);
+
+        // Asteroid hard cleanup (failsafe)
+        asteroids = asteroids.filter(
+          (a) => a.hp > 0 && a.y < canvas.height + a.size * 2
+        );
+
         explosions = explosions.filter((p) => p.life > 0);
-        asteroids = asteroids.filter((a) => a.y < canvas.height + 50);
       }
 
       function updateSector2(dtMs) {
@@ -1032,9 +1091,7 @@ export default function Home() {
           ctx.moveTo(l.x1, l.y1);
           ctx.lineTo(l.x2, l.y2);
           ctx.stroke();
-          l.alpha -= 0.05;
         }
-        lasers = lasers.filter((l) => l.alpha > 0);
       }
 
       function drawSector2() {
@@ -1101,12 +1158,34 @@ export default function Home() {
         ctx.stroke();
       }
 
+      function drawStars() {
+        for (let s of stars) {
+          ctx.fillStyle = `rgba(255,255,255,${s.alpha})`;
+          ctx.fillRect(
+            s.x * canvas.width,
+            s.y * canvas.height,
+            s.size,
+            s.size
+          );
+        }
+      }
+
       function draw() {
+        // Clear background
         ctx.fillStyle = SECTORS[currentSector].background;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // Starfield
+        drawStars();
+
+        // Station floor
         ctx.fillStyle = "#444";
-        ctx.fillRect(0, station.y() - station.baseHeight, canvas.width, station.baseHeight);
+        ctx.fillRect(
+          0,
+          station.y() - station.baseHeight,
+          canvas.width,
+          station.baseHeight
+        );
 
         ctx.strokeStyle = "#555";
         ctx.lineWidth = 1;
@@ -1127,6 +1206,12 @@ export default function Home() {
         const now = performance.now();
         const dtMs = Math.min(50, now - lastFrameMs);
         lastFrameMs = now;
+
+        // ⭐ STARFIELD UPDATE (GLOBAL)
+        for (let s of stars) {
+          s.y += s.speed * 0.001 * dtMs;
+          if (s.y > 1) s.y = 0;
+        }
 
         if (currentSector === 1) updateSector1(dtMs);
         if (currentSector === 2) updateSector2(dtMs);
@@ -1188,6 +1273,8 @@ export default function Home() {
       const goSector2Btn = document.getElementById("goSector2");
       if (goSector1Btn && handleGoSector1) goSector1Btn.removeEventListener("click", handleGoSector1);
       if (goSector2Btn && handleGoSector2) goSector2Btn.removeEventListener("click", handleGoSector2);
+
+      upgradeSpawnRateBtn?.removeEventListener("click", handleUpgradeSpawnRate);
 
       const buyTruckSmallBtn = document.getElementById("buyTruckSmall");
       const buyTruckMediumBtn = document.getElementById("buyTruckMedium");
@@ -1321,6 +1408,9 @@ export default function Home() {
           </button>
           <button id="upgradeDroneFireRate" style={sidebarStyles.button}>
             Upgrade Drone Speed
+          </button>
+          <button id="upgradeSpawnRate" style={sidebarStyles.button}>
+            Upgrade Asteroid Spawn
           </button>
 
           <div style={sidebarStyles.stat}>
