@@ -11,19 +11,7 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-function getFirebaseApp() {
-    if (!getApps().length) {
-        return initializeApp(firebaseConfig);
-    }
-    return getApp();
-}
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export function getFirebaseAuth() {
-    if (typeof window === "undefined") return null;
-    return getAuth(getFirebaseApp());
-}
-
-export function getFirebaseDb() {
-    if (typeof window === "undefined") return null;
-    return getFirestore(getFirebaseApp());
-}
+export const auth = getAuth(app);
+export const db = getFirestore(app);
