@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 
 // IMPORTANT: this must match where your firebase.js exports auth + db
 import { auth, db } from "@/lib/firebase";
@@ -16,17 +17,18 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
+    // Timer / RAF ids so we can cleanly stop everything
     let spawnTimeoutId = null;
     let droneTimeoutId = null;
     let autoSaveIntervalId = null;
     let rafId = null;
 
+    // DOM handler refs so we can remove them
     let handleCanvasClick = null;
     let handleUpgradeClick = null;
     let handleBuyDrone = null;
     let handleUpgradeDroneDamage = null;
     let handleUpgradeDroneFireRate = null;
-    let handleNextSector = null;
 
     let removeResize = null;
 
@@ -86,6 +88,7 @@ export default function Home() {
       let drones = 0;
       let droneDamage = 1;
       let currentSector = 1;
+      let unlockedSectors = [1];
 
       let asteroids = [];
       let lasers = [];
@@ -99,7 +102,7 @@ export default function Home() {
 
       // ===== DRONE PURCHASE STATE =====
       const droneBaseCost = 100;
-      const droneCostMultiplier = 10;
+      const droneCostMultiplier = 5;
 
       // ===== DRONE DAMAGE UPGRADE =====
       let droneDamageLevel = 1;
@@ -115,7 +118,7 @@ export default function Home() {
       async function saveGame() {
         if (!userId) return;
 
-        // merge:true prevents wiping fields if you later add more
+
         await setDoc(
           doc(db, "users", userId),
           {
@@ -128,6 +131,7 @@ export default function Home() {
             droneFireRate,
             droneFireRateLevel,
             currentSector,
+            unlockedSectors,
             lastSave: Date.now()
           },
           { merge: true }
@@ -143,6 +147,7 @@ export default function Home() {
         ore = data.ore ?? ore;
         clickPower = data.clickPower ?? clickPower;
         drones = data.drones ?? drones;
+        unlockedSectors = data.unlockedSectors ?? [1];
 
         // rebuild drone visuals
         droneUnits = [];
@@ -195,7 +200,8 @@ export default function Home() {
           asteroidSpeedMultiplier: 1,
           spawnDelayMin: 700,
           spawnDelayMax: 1500,
-          asteroidTypes: [{ ...ASTEROID_TYPES[0] }, { ...ASTEROID_TYPES[1] }]
+          asteroidTypes: [{ ...ASTEROID_TYPES[0] },
+          { ...ASTEROID_TYPES[1] }]
         },
         2: {
           name: "Inner Belt",
@@ -226,7 +232,7 @@ export default function Home() {
 
       function generateAsteroidShape(size) {
         const points = [];
-        const vertexCount = Math.floor(Math.random() * 5) + 7; // 7–11
+        const vertexCount = Math.floor(Math.random() * 5) + 7;
 
         for (let i = 0; i < vertexCount; i++) {
           const angle = (Math.PI * 2 / vertexCount) * i;
@@ -238,7 +244,7 @@ export default function Home() {
 
       function generateCracks(size) {
         const cracks = [];
-        const crackCount = Math.floor(Math.random() * 3) + 2; // 2–4
+        const crackCount = Math.floor(Math.random() * 3) + 2;
 
         for (let i = 0; i < crackCount; i++) {
           cracks.push({
@@ -473,9 +479,11 @@ export default function Home() {
         const upDmgEl = document.getElementById("upgradeDroneDamage");
         const upRateEl = document.getElementById("upgradeDroneFireRate");
         const sectorEl = document.getElementById("sectorDisplay");
-        const nextSectorEl = document.getElementById("nextSector");
 
-        if (!oreEl) return; // if UI not mounted yet
+        const goSector1Btn = document.getElementById("goSector1");
+        const goSector2Btn = document.getElementById("goSector2");
+
+        if (!oreEl) return;
 
         oreEl.textContent = Math.floor(ore);
         clickEl.textContent = clickPower;
@@ -488,9 +496,14 @@ export default function Home() {
 
         sectorEl.textContent = `${currentSector} (${SECTORS[currentSector].name})`;
 
-        nextSectorEl.textContent =
-          currentSector === 1 ? "Travel to Inner Belt (5000 ore)" : "Max Sector Reached";
+        // ===== SECTOR BUTTON TEXT =====
+        if (goSector2Btn) {
+          goSector2Btn.textContent = unlockedSectors.includes(2)
+            ? "Inner Belt"
+            : "Unlock Inner Belt (5000 ore)";
+        }
 
+        // ===== MANUAL MINING DISABLE =====
         if (currentSector >= 2) {
           clickEl.textContent = "Disabled";
           upClickEl.disabled = true;
@@ -536,7 +549,8 @@ export default function Home() {
       const buyDroneBtn = document.getElementById("buyDrone");
       const upgradeDroneDamageBtn = document.getElementById("upgradeDroneDamage");
       const upgradeDroneFireRateBtn = document.getElementById("upgradeDroneFireRate");
-      const nextSectorBtn = document.getElementById("nextSector");
+      const goSector1Btn = document.getElementById("goSector1");
+      const goSector2Btn = document.getElementById("goSector2");
 
       handleUpgradeClick = () => {
         if (currentSector >= 2) return;
@@ -590,9 +604,41 @@ export default function Home() {
         }
       };
 
-      handleNextSector = () => {
-        if (currentSector === 1 && ore >= 5000) {
+      upgradeClickBtn?.addEventListener("click", handleUpgradeClick);
+      buyDroneBtn?.addEventListener("click", handleBuyDrone);
+      upgradeDroneDamageBtn?.addEventListener("click", handleUpgradeDroneDamage);
+      upgradeDroneFireRateBtn?.addEventListener("click", handleUpgradeDroneFireRate);
+      goSector1Btn?.addEventListener("click", () => {
+        if (currentSector === 1) return;
+
+        currentSector = 1;
+
+        asteroids = [];
+        lasers = [];
+        explosions = [];
+
+        updateUI();
+        saveGame();
+      });
+
+      goSector2Btn?.addEventListener("click", () => {
+        if (unlockedSectors.includes(2)) {
+          if (currentSector === 2) return;
+
+          currentSector = 2;
+
+          asteroids = [];
+          lasers = [];
+          explosions = [];
+
+          updateUI();
+          saveGame();
+          return;
+        }
+
+        if (ore >= 5000) {
           ore -= 5000;
+          unlockedSectors.push(2);
           currentSector = 2;
 
           asteroids = [];
@@ -602,13 +648,7 @@ export default function Home() {
           updateUI();
           saveGame();
         }
-      };
-
-      upgradeClickBtn?.addEventListener("click", handleUpgradeClick);
-      buyDroneBtn?.addEventListener("click", handleBuyDrone);
-      upgradeDroneDamageBtn?.addEventListener("click", handleUpgradeDroneDamage);
-      upgradeDroneFireRateBtn?.addEventListener("click", handleUpgradeDroneFireRate);
-      nextSectorBtn?.addEventListener("click", handleNextSector);
+      });
 
       // ===== START EVERYTHING (after load) =====
       await loadGame();
@@ -654,7 +694,6 @@ export default function Home() {
         upgradeDroneDamageBtn.removeEventListener("click", handleUpgradeDroneDamage);
       if (upgradeDroneFireRateBtn && handleUpgradeDroneFireRate)
         upgradeDroneFireRateBtn.removeEventListener("click", handleUpgradeDroneFireRate);
-      if (nextSectorBtn && handleNextSector) nextSectorBtn.removeEventListener("click", handleNextSector);
     };
   }, [router]);
 
@@ -685,11 +724,22 @@ export default function Home() {
         <p>
           Drones: <span id="droneCountDisplay">0</span>
         </p>
+        <h3>Sectors</h3>
 
-        <button id="nextSector">Travel to Next Sector</button>
+        <button id="goSector1">Outer Belt</button>
+        <button id="goSector2">Unlock Inner Belt (5000 ore)</button>
+
         <p>
           Current Sector: <span id="sectorDisplay">1</span>
         </p>
+        <button
+          onClick={async () => {
+            await signOut(auth);
+            router.replace("/login");
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       <canvas ref={canvasRef} id="gameCanvas" style={{ background: "black" }} />

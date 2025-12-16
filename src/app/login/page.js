@@ -2,56 +2,69 @@
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
+
+// IMPORTANT: adjust import if your firebase.js path differs
+import { auth } from "@/lib/firebase";
 
 export default function LoginPage() {
     const router = useRouter();
+
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
 
     async function handleLogin(e) {
         e.preventDefault();
         setError("");
+        setLoading(true);
 
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            router.push("/"); // game page
+            router.push("/"); // go to game
         } catch (err) {
             setError(err.message);
+            setLoading(false);
         }
     }
 
     return (
         <div style={styles.container}>
-            <h1>Login</h1>
+            <h1>Stellar Extractor</h1>
+            <h2>Login</h2>
 
             <form onSubmit={handleLogin} style={styles.form}>
                 <input
                     type="email"
                     placeholder="Email"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
+                    style={styles.input}
                 />
 
                 <input
                     type="password"
                     placeholder="Password"
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value)}
                     required
+                    style={styles.input}
                 />
 
-                <button type="submit">Login</button>
+                <button type="submit" disabled={loading} style={styles.button}>
+                    {loading ? "Logging in..." : "Login"}
+                </button>
             </form>
 
             {error && <p style={styles.error}>{error}</p>}
 
-            <p>
-                <a href="/signup">Create account</a> ·{" "}
-                <a href="/forgot-password">Forgot password?</a>
+            <p style={styles.footer}>
+                Don’t have an account?{" "}
+                <a href="/signup" style={styles.link}>
+                    Sign up
+                </a>
             </p>
         </div>
     );
@@ -60,20 +73,47 @@ export default function LoginPage() {
 const styles = {
     container: {
         minHeight: "100vh",
-        background: "#111",
+        background: "#0b0b0b",
         color: "white",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
         justifyContent: "center",
+        alignItems: "center",
     },
     form: {
         display: "flex",
         flexDirection: "column",
-        gap: "10px",
-        width: "250px",
+        gap: "12px",
+        width: "260px",
+        marginTop: "10px",
+    },
+    input: {
+        padding: "10px",
+        fontSize: "16px",
+        borderRadius: "4px",
+        border: "none",
+    },
+    button: {
+        padding: "10px",
+        fontSize: "16px",
+        cursor: "pointer",
+        background: "#1abc9c",
+        border: "none",
+        borderRadius: "4px",
+        fontWeight: "bold",
     },
     error: {
-        color: "#ff5555",
+        color: "#ff6b6b",
+        marginTop: "10px",
+        maxWidth: "260px",
+        textAlign: "center",
+    },
+    footer: {
+        marginTop: "15px",
+        fontSize: "14px",
+    },
+    link: {
+        color: "#1abc9c",
+        textDecoration: "none",
     },
 };
