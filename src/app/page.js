@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-
-const auth = getFirebaseAuth();
+import { getFirebaseAuth, getFirebaseDB } from "@/lib/firebase";
 
 export default function Home() {
   const router = useRouter();
   const canvasRef = useRef(null);
   const [uiSector, setUiSector] = useState(1);
+
+  const auth = getFirebaseAuth();
+  const db = getFirebaseDB();
 
   async function resetGame() {
     const user = auth.currentUser;
@@ -42,6 +43,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (!auth || !db) return;
     let cancelled = false;
 
     let spawnTimeoutId = null;
