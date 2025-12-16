@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { getFirebaseAuth } from "@/lib/firebase";
 
@@ -20,14 +19,12 @@ export default function LoginPage() {
         setError("");
         setLoading(true);
 
-        const auth = getFirebaseAuth();
-        if (!auth) {
-            setError("Auth not available");
-            setLoading(false);
-            return;
-        }
-
         try {
+            const { signInWithEmailAndPassword } = await import("firebase/auth");
+
+            const auth = getFirebaseAuth();
+            if (!auth) throw new Error("Auth unavailable");
+
             await signInWithEmailAndPassword(auth, email, password);
             router.push("/");
         } catch (err) {
@@ -85,27 +82,19 @@ const styles = {
         flexDirection: "column",
         gap: "12px",
         width: "260px",
-        marginTop: "10px",
     },
     input: {
         padding: "10px",
         fontSize: "16px",
-        borderRadius: "4px",
-        border: "none",
     },
     button: {
         padding: "10px",
-        fontSize: "16px",
-        cursor: "pointer",
         background: "#1abc9c",
-        border: "none",
-        borderRadius: "4px",
         fontWeight: "bold",
+        border: "none",
     },
     error: {
         color: "#ff6b6b",
         marginTop: "10px",
-        maxWidth: "260px",
-        textAlign: "center",
     },
 };
