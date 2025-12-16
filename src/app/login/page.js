@@ -4,8 +4,9 @@ import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
-// IMPORTANT: adjust import if your firebase.js path differs
 import { auth } from "@/lib/firebase";
+
+export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
     const router = useRouter();
