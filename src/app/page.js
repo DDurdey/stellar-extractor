@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
-import { auth, db } from "@/lib/firebase";
+import { getFirebaseAuth, getFirebaseDB } from "@/lib/firebase";
+
+const auth = getFirebaseAuth();
+const db = getFirebaseDB();
 
 export default function Home() {
   const router = useRouter();

@@ -5,8 +5,10 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
-// IMPORTANT: adjust import if your firebase.js path differs
-import { auth, db } from "@/lib/firebase";
+import { getFirebaseAuth, getFirebaseDB } from "@/lib/firebase";
+
+const auth = getFirebaseAuth();
+const db = getFirebaseDB();
 
 export default function SignupPage() {
     const router = useRouter();
