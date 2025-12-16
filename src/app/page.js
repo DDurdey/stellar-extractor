@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -11,6 +11,35 @@ import { auth, db } from "@/lib/firebase";
 export default function Home() {
   const router = useRouter();
   const canvasRef = useRef(null);
+  const [uiSector, setUiSector] = useState(1);
+
+  async function resetGame() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    await setDoc(doc(db, "users", user.uid), {
+      ore: 0,
+      currentSector: 1,
+      unlockedSectors: [1],
+
+      clickPower: 1,
+      clickLevel: 1,
+      drones: 0,
+      droneDamage: 1,
+      droneDamageLevel: 1,
+      droneFireRate: 1000,
+      droneFireRateLevel: 1,
+
+      truckCounts: { small: 0, medium: 0, large: 0 },
+      truckGatherLevel: 0,
+      truckUnloadLevel: 0,
+      truckTravelLevel: 0,
+
+      lastSave: Date.now(),
+    });
+
+    window.location.reload();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +119,18 @@ export default function Home() {
       const ctx = canvas.getContext("2d");
 
       function resizeCanvas() {
-        canvas.width = window.innerWidth - 250;
-        canvas.height = window.innerHeight;
+        const sidebarWidth = 260;
+        const width = window.innerWidth - sidebarWidth;
+        const height = window.innerHeight;
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // 🔥 THIS IS THE IMPORTANT PART
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+
+        ctx.imageSmoothingEnabled = false;
       }
       resizeCanvas();
       window.addEventListener("resize", resizeCanvas);
@@ -104,6 +143,8 @@ export default function Home() {
 
       let currentSector = 1;
       let unlockedSectors = [1];
+
+      const GLOBAL_INCOME_MULTIPLIER = 0.65;
 
       // =========================
       // SECTOR 1 STATE
@@ -130,7 +171,7 @@ export default function Home() {
         small: {
           id: "small",
           label: "Small Truck",
-          cost: 500,
+          cost: 5000,
           capacity: 60,
           gatherMs: 8000,
           unloadMs: 3000,
@@ -141,22 +182,22 @@ export default function Home() {
         medium: {
           id: "medium",
           label: "Medium Truck",
-          cost: 2000,
+          cost: 200000,
           capacity: 250,
           gatherMs: 12000,
           unloadMs: 3500,
-          travelPxPerFrame: 5,
+          travelPxPerFrame: 4,
           drawW: 44,
           drawH: 18,
         },
         large: {
           id: "large",
           label: "Large Truck",
-          cost: 10000,
+          cost: 10000000,
           capacity: 900,
           gatherMs: 20000,
           unloadMs: 4500,
-          travelPxPerFrame: 6,
+          travelPxPerFrame: 4,
           drawW: 56,
           drawH: 20,
         },
@@ -268,6 +309,19 @@ export default function Home() {
 
         rebuildTrucksFromCounts();
         rebuildDroneUnits();
+
+        // =========================
+        // OFFLINE PROGRESS
+        // =========================
+        const now = Date.now();
+        const last = data.lastSave ?? now;
+        const secondsOffline = Math.floor((now - last) / 1000);
+
+        if (secondsOffline > 0) {
+          const incomePerSecond = getTotalOrePerSecond();
+          ore += incomePerSecond * secondsOffline;
+        }
+        setUiSector(currentSector);
 
         updateUI();
       }
@@ -469,6 +523,8 @@ export default function Home() {
       function switchSector(newSector) {
         if (newSector === currentSector) return;
 
+        setUiSector(newSector);
+
         stopSectorLoops();
 
         currentSector = newSector;
@@ -478,7 +534,6 @@ export default function Home() {
           startSpawning();
           droneAttack();
         } else if (currentSector === 2) {
-
         }
 
         updateUI();
@@ -488,10 +543,65 @@ export default function Home() {
       // =========================
       // TRUCK UPGRADES + COSTS
       // =========================
+
+      function getDroneOrePerSecond() {
+        if (drones === 0) return 0;
+        return (drones * droneDamage) / (droneFireRate / 1000);
+      }
+
+      function getTruckOrePerSecond(typeId) {
+        const baseRates = {
+          small: 25,
+          medium: 120,
+          large: 600,
+        };
+
+        const upgradeMultiplier = 1 + truckGatherLevel * 0.6;
+        return baseRates[typeId] * upgradeMultiplier;
+      }
+
+      function getTotalOrePerSecond() {
+        let total = 0;
+
+        total += getDroneOrePerSecond();
+
+        for (const typeId of ["small", "medium", "large"]) {
+          const count = truckCounts[typeId] || 0;
+          total += count * getTruckOrePerSecond(typeId);
+        }
+
+        return total * GLOBAL_INCOME_MULTIPLIER;
+      }
+
+      function getDroneOrePerMinute() {
+        return getDroneOrePerSecond() * 60;
+      }
+
+      function getTruckOrePerMinute() {
+        let total = 0;
+        for (const typeId of ["small", "medium", "large"]) {
+          const count = truckCounts[typeId] || 0;
+          total += count * getTruckOrePerSecond(typeId);
+        }
+        return total * 60;
+      }
+
+      function getTotalOrePerMinute() {
+        return getTotalOrePerSecond() * 60;
+      }
+
       function getTruckBuyCost(typeId) {
-        const base = TRUCK_TYPES[typeId].cost;
         const owned = truckCounts[typeId] || 0;
-        return Math.floor(base * Math.pow(1.35, owned));
+
+        // First small truck is free
+        if (typeId === "small" && owned === 0) {
+          return 0;
+        }
+
+        const base = TRUCK_TYPES[typeId].cost;
+
+        // Aggressive scaling (Sector 2 is expensive)
+        return Math.floor(base * Math.pow(2.2, owned));
       }
 
       function getTruckUpgradeCost(kind) {
@@ -505,21 +615,31 @@ export default function Home() {
       // UI UPDATES
       // =========================
       function updateUI() {
+        // ===== CORE DISPLAYS =====
         const oreEl = document.getElementById("oreDisplay");
         const clickEl = document.getElementById("clickPowerDisplay");
         const dronesEl = document.getElementById("droneCountDisplay");
         const sectorEl = document.getElementById("sectorDisplay");
 
+        // Ore-per-minute displays
+        const droneOPMEl = document.getElementById("droneOPM");
+        const truckOPMEl = document.getElementById("truckOPM");
+        const totalOPMEl = document.getElementById("totalOPM");
+
+        // Sections
         const sector1Controls = document.getElementById("sector1Controls");
         const sector2Controls = document.getElementById("sector2Controls");
 
+        // Sector 1 buttons
         const upClickEl = document.getElementById("upgradeClick");
         const buyDroneEl = document.getElementById("buyDrone");
         const upDmgEl = document.getElementById("upgradeDroneDamage");
         const upRateEl = document.getElementById("upgradeDroneFireRate");
 
+        // Sector switching
         const goSector2Btn = document.getElementById("goSector2");
 
+        // Sector 2 buttons
         const buyTruckSmallEl = document.getElementById("buyTruckSmall");
         const buyTruckMediumEl = document.getElementById("buyTruckMedium");
         const buyTruckLargeEl = document.getElementById("buyTruckLarge");
@@ -532,6 +652,7 @@ export default function Home() {
 
         if (!oreEl) return;
 
+        // ===== BASIC STATS =====
         oreEl.textContent = Math.floor(ore);
         sectorEl.textContent = `${currentSector} (${SECTORS[currentSector].name})`;
 
@@ -541,10 +662,11 @@ export default function Home() {
             : "Unlock Inner Belt (5000 ore)";
         }
 
+        // ===== SECTOR VISIBILITY =====
         if (sector1Controls) sector1Controls.style.display = currentSector === 1 ? "block" : "none";
         if (sector2Controls) sector2Controls.style.display = currentSector === 2 ? "block" : "none";
 
-        // Sector 1 UI
+        // ===== SECTOR 1 UI =====
         if (clickEl) clickEl.textContent = currentSector === 1 ? clickPower : "Disabled";
         if (dronesEl) dronesEl.textContent = drones;
 
@@ -553,18 +675,18 @@ export default function Home() {
         if (upDmgEl) upDmgEl.textContent = `Upgrade Drone Damage (${getDroneDamageUpgradeCost()} ore)`;
         if (upRateEl) upRateEl.textContent = `Upgrade Drone Speed (${getDroneFireRateUpgradeCost()} ore)`;
 
-        if (currentSector !== 1 && upClickEl) {
-          upClickEl.disabled = true;
-          upClickEl.textContent = "Manual Mining Offline";
-        } else if (upClickEl) {
-          upClickEl.disabled = false;
+        if (upClickEl) {
+          upClickEl.disabled = currentSector !== 1;
+          if (currentSector !== 1) upClickEl.textContent = "Manual Mining Offline";
         }
 
-        // Sector 2 UI
-        if (buyTruckSmallEl) buyTruckSmallEl.textContent = `Buy Small Truck (${getTruckBuyCost("small")} ore)`;
+        // ===== SECTOR 2 UI =====
+        if (buyTruckSmallEl)
+          buyTruckSmallEl.textContent = `Buy Small Truck (${getTruckBuyCost("small")} ore)`;
         if (buyTruckMediumEl)
           buyTruckMediumEl.textContent = `Buy Medium Truck (${getTruckBuyCost("medium")} ore)`;
-        if (buyTruckLargeEl) buyTruckLargeEl.textContent = `Buy Large Truck (${getTruckBuyCost("large")} ore)`;
+        if (buyTruckLargeEl)
+          buyTruckLargeEl.textContent = `Buy Large Truck (${getTruckBuyCost("large")} ore)`;
 
         if (upTruckGatherEl)
           upTruckGatherEl.textContent = `Upgrade Gather (${getTruckUpgradeCost("gather")} ore) Lv ${truckGatherLevel}`;
@@ -574,9 +696,21 @@ export default function Home() {
           upTruckTravelEl.textContent = `Upgrade Travel (${getTruckUpgradeCost("travel")} ore) Lv ${truckTravelLevel}`;
 
         if (truckCountsEl) {
-          truckCountsEl.textContent = `Small: ${truckCounts.small || 0}  |  Medium: ${truckCounts.medium || 0
-            }  |  Large: ${truckCounts.large || 0}`;
+          truckCountsEl.textContent =
+            `Small: ${truckCounts.small || 0}  |  ` +
+            `Medium: ${truckCounts.medium || 0}  |  ` +
+            `Large: ${truckCounts.large || 0}`;
         }
+
+        // ===== ORE PER MINUTE (ALWAYS UPDATE) =====
+        if (droneOPMEl)
+          droneOPMEl.textContent = Math.floor(getDroneOrePerMinute());
+
+        if (truckOPMEl)
+          truckOPMEl.textContent = Math.floor(getTruckOrePerMinute());
+
+        if (totalOPMEl)
+          totalOPMEl.textContent = Math.floor(getTotalOrePerMinute());
       }
 
       // =========================
@@ -862,10 +996,19 @@ export default function Home() {
         for (let d of droneUnits) {
           const hoverY = d.y + Math.sin(Date.now() / 500 + d.hoverOffset) * 5;
 
-          ctx.fillStyle = "#0ff";
-          ctx.beginPath();
-          ctx.arc(d.x, hoverY, 6, 0, Math.PI * 2);
-          ctx.fill();
+          // Industrial drone design
+          ctx.fillStyle = "#555";
+          ctx.fillRect(d.x - 6, hoverY - 4, 12, 8);
+
+          ctx.fillStyle = "#777";
+          ctx.fillRect(d.x - 10, hoverY - 2, 4, 4);
+          ctx.fillRect(d.x + 6, hoverY - 2, 4, 4);
+
+          ctx.fillStyle = "#999";
+          ctx.fillRect(d.x - 2, hoverY - 2, 4, 4);
+
+          ctx.fillStyle = "rgba(255,165,0,0.6)";
+          ctx.fillRect(d.x - 1, hoverY + 4, 2, 4);
 
           ctx.strokeStyle = "#0aa";
           ctx.lineWidth = 2;
@@ -895,24 +1038,67 @@ export default function Home() {
       }
 
       function drawSector2() {
-        const baseY = canvas.height - 60;
+        const padding = 20;
+        const sectionHeight = canvas.height / 3;
+        const sections = {
+          small: 0,
+          medium: 1,
+          large: 2,
+        };
 
-        for (let i = 0; i < trucks.length; i++) {
-          const t = trucks[i];
-          const type = TRUCK_TYPES[t.typeId];
+        const lanes = {
+          small: [],
+          medium: [],
+          large: [],
+        };
 
-          const lane = i % 6;
-          const y = baseY - lane * 22;
-
-          ctx.fillStyle = t.typeId === "small" ? "#f1c40f" : t.typeId === "medium" ? "#e67e22" : "#c0392b";
-          ctx.fillRect(t.x, y, type.drawW, type.drawH);
-
-          ctx.fillStyle = "rgba(255,255,255,0.25)";
-          ctx.fillRect(t.x + type.drawW - 10, y + 3, 7, type.drawH - 6);
+        for (const t of trucks) {
+          lanes[t.typeId].push(t);
         }
 
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.fillRect(0, baseY + 8, 120, 18);
+        const drawSection = (typeId) => {
+          const sectionIndex = sections[typeId];
+          const startY = sectionIndex * sectionHeight;
+          const usableHeight = sectionHeight - padding * 2;
+          const spacing = 26;
+
+          lanes[typeId].forEach((t, i) => {
+            const y =
+              startY +
+              padding +
+              (i * spacing) % Math.max(spacing, usableHeight - spacing);
+
+            ctx.fillStyle =
+              typeId === "small"
+                ? "#c9a227"
+                : typeId === "medium"
+                  ? "#b87333"
+                  : "#8b0000";
+
+            ctx.fillRect(
+              t.x + 20,
+              y,
+              TRUCK_TYPES[typeId].drawW,
+              TRUCK_TYPES[typeId].drawH
+            );
+          });
+        };
+
+        drawSection("small");
+        drawSection("medium");
+        drawSection("large");
+
+        // Horizontal separators
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(0, sectionHeight);
+        ctx.lineTo(canvas.width, sectionHeight);
+
+        ctx.moveTo(0, sectionHeight * 2);
+        ctx.lineTo(canvas.width, sectionHeight * 2);
+        ctx.stroke();
       }
 
       function draw() {
@@ -1025,85 +1211,211 @@ export default function Home() {
     };
   }, [router]);
 
+  const sidebarStyles = {
+    container: {
+      width: "260px",
+      background: "linear-gradient(180deg, #0c1018, #05070c)",
+      color: "#eaeaea",
+      padding: "20px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "16px",
+      borderRight: "1px solid rgba(255,255,255,0.08)",
+      boxShadow: "inset -4px 0 8px rgba(0,0,0,0.6)"
+    },
+    title: {
+      fontSize: "22px",
+      fontWeight: "bold",
+      letterSpacing: "1px",
+      textAlign: "center",
+      color: "#7fdfff",
+      marginBottom: "6px"
+    },
+    section: {
+      background: "rgba(255,255,255,0.03)",
+      borderRadius: "10px",
+      padding: "12px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      boxShadow: "0 0 12px rgba(0,0,0,0.4)"
+    },
+    sectionTitle: {
+      fontSize: "13px",
+      letterSpacing: "1px",
+      opacity: 0.7
+    },
+    stat: {
+      fontSize: "14px"
+    },
+    button: {
+      background: "#141a22",
+      color: "#eaeaea",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "6px",
+      padding: "8px",
+      cursor: "pointer",
+      transition: "all 0.15s ease",
+      fontSize: "14px"
+    },
+    buttonActive: {
+      background: "#1e90ff",
+      border: "none",
+      color: "white",
+      fontWeight: "bold",
+      boxShadow: "0 0 12px rgba(30,144,255,0.6)"
+    },
+    buttonPrimary: {
+      background: "#1e90ff",
+      border: "none",
+      color: "white",
+      fontWeight: "bold"
+    },
+    buttonDanger: {
+      background: "#c0392b",
+      border: "none",
+      color: "white",
+      fontWeight: "bold"
+    },
+    divider: {
+      height: "1px",
+      background: "rgba(255,255,255,0.08)",
+      margin: "10px 0"
+    }
+  };
+
   return (
     <div style={{ display: "flex" }}>
-      <div
-        style={{
-          width: "250px",
-          background: "#111",
-          color: "white",
-          padding: "20px",
-        }}
-      >
-        <h1>Stellar Extractor</h1>
+      <div style={sidebarStyles.container}>
+        <div style={sidebarStyles.title}>STELLAR EXTRACTOR</div>
 
-        <p>
-          Ore: <span id="oreDisplay">0</span>
-        </p>
+        {/* Resources */}
+        <div style={sidebarStyles.section}>
+          <div style={sidebarStyles.sectionTitle}>RESOURCES</div>
+          <div style={sidebarStyles.stat}>
+            Ore: <span id="oreDisplay">0</span>
+          </div>
+          <div style={sidebarStyles.stat}>
+            Drones Ore/min: <span id="droneOPM">0</span>
+          </div>
+          <div style={sidebarStyles.stat}>
+            Trucks Ore/min: <span id="truckOPM">0</span>
+          </div>
+          <div style={sidebarStyles.stat}>
+            Total Ore/min: <span id="totalOPM">0</span>
+          </div>
+        </div>
 
         {/* Sector 1 Controls */}
-        <div id="sector1Controls">
-          <button id="upgradeClick">Upgrade Click Power</button>
-          <button id="buyDrone">Buy Drone</button>
-          <button id="upgradeDroneDamage">Upgrade Drone Damage</button>
-          <button id="upgradeDroneFireRate">Upgrade Drone Speed</button>
+        <div id="sector1Controls" style={sidebarStyles.section}>
+          <div style={sidebarStyles.sectionTitle}>MINING</div>
 
-          <p>
+          <button id="upgradeClick" style={sidebarStyles.button}>
+            Upgrade Click
+          </button>
+          <button id="buyDrone" style={sidebarStyles.button}>
+            Buy Drone
+          </button>
+          <button id="upgradeDroneDamage" style={sidebarStyles.button}>
+            Upgrade Drone Damage
+          </button>
+          <button id="upgradeDroneFireRate" style={sidebarStyles.button}>
+            Upgrade Drone Speed
+          </button>
+
+          <div style={sidebarStyles.stat}>
             Click Power: <span id="clickPowerDisplay">1</span>
-          </p>
-          <p>
+          </div>
+          <div style={sidebarStyles.stat}>
             Drones: <span id="droneCountDisplay">0</span>
-          </p>
+          </div>
         </div>
 
         {/* Sector 2 Controls */}
-        <div id="sector2Controls" style={{ display: "none" }}>
-          <h3>Space Trucks</h3>
+        <div id="sector2Controls" style={{ ...sidebarStyles.section, display: "none" }}>
+          <div style={sidebarStyles.sectionTitle}>SPACE TRUCKS</div>
 
-          <button id="buyTruckSmall">Buy Small Truck (500 ore)</button>
-          <button id="buyTruckMedium">Buy Medium Truck (2000 ore)</button>
-          <button id="buyTruckLarge">Buy Large Truck (10000 ore)</button>
+          <button id="buyTruckSmall" style={sidebarStyles.button}>
+            Buy Small Truck
+          </button>
+          <button id="buyTruckMedium" style={sidebarStyles.button}>
+            Buy Medium Truck
+          </button>
+          <button id="buyTruckLarge" style={sidebarStyles.button}>
+            Buy Large Truck
+          </button>
 
-          <p id="truckCountsDisplay">Small: 0 | Medium: 0 | Large: 0</p>
+          <div id="truckCountsDisplay" style={sidebarStyles.stat}>
+            Small: 0 | Medium: 0 | Large: 0
+          </div>
 
-          <h4>Truck Upgrades</h4>
-          <button id="upgradeTruckGather">Upgrade Gather</button>
-          <button id="upgradeTruckUnload">Upgrade Unload</button>
-          <button id="upgradeTruckTravel">Upgrade Travel</button>
+          <div style={sidebarStyles.sectionTitle}>UPGRADES</div>
+          <button id="upgradeTruckGather" style={sidebarStyles.button}>
+            Upgrade Gather
+          </button>
+          <button id="upgradeTruckUnload" style={sidebarStyles.button}>
+            Upgrade Unload
+          </button>
+          <button id="upgradeTruckTravel" style={sidebarStyles.button}>
+            Upgrade Travel
+          </button>
         </div>
 
-        <hr style={{ margin: "16px 0", opacity: 0.3 }} />
+        <div style={sidebarStyles.divider} />
 
-        <h3>Sectors</h3>
-        <button id="goSector1">Outer Belt</button>
-        <button id="goSector2">Unlock Inner Belt (5000 ore)</button>
+        {/* Sector Travel */}
+        <div style={sidebarStyles.section}>
+          <div style={sidebarStyles.sectionTitle}>SECTORS</div>
 
-        <p>
-          Current Sector: <span id="sectorDisplay">1</span>
-        </p>
+          <button
+            id="goSector1"
+            style={uiSector === 1 ? sidebarStyles.buttonActive : sidebarStyles.button}
+          >
+            Outer Belt
+          </button>
 
-        <hr style={{ margin: "16px 0", opacity: 0.3 }} />
+          <button
+            id="goSector2"
+            style={uiSector === 2 ? sidebarStyles.buttonActive : sidebarStyles.button}
+          >
+            Inner Belt
+          </button>
 
+          <div style={sidebarStyles.stat}>
+            Current: <span id="sectorDisplay">1</span>
+          </div>
+        </div>
+
+        <div style={sidebarStyles.divider} />
+
+        {/* Logout */}
         <button
           onClick={async () => {
             await signOut(auth);
             router.replace("/login");
           }}
-          style={{
-            width: "100%",
-            padding: "8px",
-            background: "#c0392b",
-            color: "white",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
+          style={{ ...sidebarStyles.button, ...sidebarStyles.buttonDanger }}
         >
           Logout
         </button>
+
+        <button
+          onClick={resetGame}
+          style={{ ...sidebarStyles.button, background: "#444" }}
+        >
+          Reset Game
+        </button>
       </div>
 
-      <canvas ref={canvasRef} id="gameCanvas" style={{ background: "black" }} />
+      <canvas
+        ref={canvasRef}
+        id="gameCanvas"
+        style={{
+          background: "black",
+          display: "block",
+          flexShrink: 0
+        }}
+      />
     </div>
   );
 }
