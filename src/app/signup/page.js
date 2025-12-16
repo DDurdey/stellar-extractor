@@ -4,13 +4,11 @@ import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-
 import { getFirebaseAuth, getFirebaseDB } from "@/lib/firebase";
 
-const auth = getFirebaseAuth();
-const db = getFirebaseDB();
-
 export default function SignupPage() {
+    const auth = getFirebaseAuth();
+    const db = getFirebaseDB();
     const router = useRouter();
 
     const [email, setEmail] = useState("");
