@@ -72,6 +72,18 @@ export default function Home() {
 
     let removeResize = null;
 
+    let passiveIncomeInterval = null;
+
+    function startPassiveIncome() {
+      if (passiveIncomeInterval) return;
+
+      passiveIncomeInterval = setInterval(() => {
+        const incomePerSecond = getTotalOrePerSecond();
+        ore += incomePerSecond;
+        updateUI();
+      }, 1000);
+    }
+
     async function ensureSaveExists(uid) {
       const userRef = doc(db, "users", uid);
       const snap = await getDoc(userRef);
@@ -519,7 +531,6 @@ export default function Home() {
             }
 
             const damage = droneDamage * droneUnits.length;
-            ore += damage;
             target.hp -= damage;
 
             if (target.hp <= 0) {
@@ -1230,6 +1241,8 @@ export default function Home() {
 
       updateUI();
 
+      startPassiveIncome();
+
       if (currentSector === 1) {
         startSpawning();
         droneAttack();
@@ -1253,6 +1266,7 @@ export default function Home() {
       if (droneTimeoutId) clearTimeout(droneTimeoutId);
       if (autoSaveIntervalId) clearInterval(autoSaveIntervalId);
       if (rafId) cancelAnimationFrame(rafId);
+      if (passiveIncomeInterval) clearInterval(passiveIncomeInterval);
 
       removeResize?.();
 
