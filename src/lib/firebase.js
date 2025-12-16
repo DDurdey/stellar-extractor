@@ -19,9 +19,11 @@ function getFirebaseApp() {
 }
 
 export function getFirebaseAuth() {
+    if (typeof window === "undefined") return null;
     return getAuth(getFirebaseApp());
 }
 
-export function getFirebaseDB() {
+export function getFirebaseDb() {
+    if (typeof window === "undefined") return null;
     return getFirestore(getFirebaseApp());
 }

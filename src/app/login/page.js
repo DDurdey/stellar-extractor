@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 "use client";
 
 import { useState } from "react";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -18,14 +20,18 @@ export default function LoginPage() {
         setError("");
         setLoading(true);
 
-        try {
-            const { auth } = await import("@/lib/firebase");
-            const { signInWithEmailAndPassword } = await import("firebase/auth");
+        const auth = getFirebaseAuth();
+        if (!auth) {
+            setError("Auth not available");
+            setLoading(false);
+            return;
+        }
 
+        try {
             await signInWithEmailAndPassword(auth, email, password);
             router.push("/");
         } catch (err) {
-            setError(err.message ?? "Login failed");
+            setError(err.message);
             setLoading(false);
         }
     }
@@ -60,13 +66,6 @@ export default function LoginPage() {
             </form>
 
             {error && <p style={styles.error}>{error}</p>}
-
-            <p style={styles.footer}>
-                Don’t have an account?{" "}
-                <a href="/signup" style={styles.link}>
-                    Sign up
-                </a>
-            </p>
         </div>
     );
 }
@@ -108,13 +107,5 @@ const styles = {
         marginTop: "10px",
         maxWidth: "260px",
         textAlign: "center",
-    },
-    footer: {
-        marginTop: "15px",
-        fontSize: "14px",
-    },
-    link: {
-        color: "#1abc9c",
-        textDecoration: "none",
     },
 };

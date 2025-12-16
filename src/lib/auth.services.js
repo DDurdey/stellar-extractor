@@ -1,23 +1,16 @@
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    sendPasswordResetEmail,
-    signOut
-} from "firebase/auth";
-import { auth } from "./firebase";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase";
 
-export function signup(email, password) {
-    return createUserWithEmailAndPassword(auth, email, password);
-}
+export async function login(email, password) {
+    const auth = getFirebaseAuth();
+    if (!auth) throw new Error("Auth not available");
 
-export function login(email, password) {
     return signInWithEmailAndPassword(auth, email, password);
 }
 
-export function logout() {
-    return signOut(auth);
-}
+export async function logout() {
+    const auth = getFirebaseAuth();
+    if (!auth) return;
 
-export function resetPassword(email) {
-    return sendPasswordResetEmail(auth, email);
+    return signOut(auth);
 }
