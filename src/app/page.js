@@ -442,6 +442,21 @@ export default function Home() {
         }
       }
 
+      function spawnClickExplosion(x, y, color) {
+        const particleCount = 6; // small, subtle
+
+        for (let i = 0; i < particleCount; i++) {
+          explosions.push({
+            x,
+            y,
+            vx: (Math.random() - 0.5) * 2.5,
+            vy: (Math.random() - 0.5) * 2.5,
+            life: 0.6, // shorter life than full explosion
+            color,
+          });
+        }
+      }
+
       function getRandomAsteroidType() {
         const types = SECTORS[1].asteroidTypes;
         const totalWeight = types.reduce((sum, t) => sum + t.spawnWeight, 0);
@@ -785,6 +800,9 @@ export default function Home() {
 
           if (dist < a.size) {
             const damage = clickPower;
+
+            spawnClickExplosion(mx, my, a.color);
+
             ore += damage;
             a.hp -= damage;
 
@@ -1207,22 +1225,55 @@ export default function Home() {
         // Starfield
         drawStars();
 
-        // Station floor
-        ctx.fillStyle = "#444";
-        ctx.fillRect(
-          0,
-          station.y() - station.baseHeight,
-          canvas.width,
-          station.baseHeight
-        );
+        // Space station
+        drawStation();
 
-        ctx.strokeStyle = "#555";
-        ctx.lineWidth = 1;
-        for (let x = 0; x < canvas.width; x += 80) {
-          ctx.beginPath();
-          ctx.moveTo(x, station.y() - station.baseHeight);
-          ctx.lineTo(x, station.y());
-          ctx.stroke();
+        function drawStation() {
+          const y = station.y();
+          const h = station.baseHeight;
+
+          // ===== MAIN BODY =====
+          ctx.fillStyle = "#2b2f36";
+          ctx.fillRect(0, y - h, canvas.width, h);
+
+          // ===== TOP EDGE =====
+          ctx.fillStyle = "#3a3f48";
+          ctx.fillRect(0, y - h - 6, canvas.width, 6);
+
+          // ===== PANEL LINES =====
+          ctx.strokeStyle = "rgba(255,255,255,0.06)";
+          ctx.lineWidth = 1;
+          for (let x = 0; x < canvas.width; x += 90) {
+            ctx.beginPath();
+            ctx.moveTo(x, y - h);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          }
+
+          // ===== DOCK BAYS =====
+          const bayWidth = 80;
+          const bayHeight = h - 10;
+          const gap = 40;
+
+          for (let x = 40; x < canvas.width; x += bayWidth + gap) {
+            // bay frame
+            ctx.fillStyle = "#1a1d22";
+            ctx.fillRect(x, y - bayHeight - 5, bayWidth, bayHeight);
+
+            // inner glow
+            const grd = ctx.createLinearGradient(0, y - bayHeight, 0, y);
+            grd.addColorStop(0, "rgba(0,200,255,0.25)");
+            grd.addColorStop(1, "rgba(0,200,255,0)");
+
+            ctx.fillStyle = grd;
+            ctx.fillRect(x + 6, y - bayHeight + 6, bayWidth - 12, bayHeight - 12);
+          }
+
+          // ===== STATUS LIGHTS =====
+          for (let x = 20; x < canvas.width; x += 120) {
+            ctx.fillStyle = "rgba(0,255,255,0.7)";
+            ctx.fillRect(x, y - h - 4, 8, 4);
+          }
         }
 
         if (currentSector === 1) drawSector1();
