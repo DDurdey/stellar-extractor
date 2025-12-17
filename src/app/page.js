@@ -922,7 +922,14 @@ export default function Home() {
 
         ore -= cost;
         truckCounts[typeId] = (truckCounts[typeId] || 0) + 1;
-        rebuildTrucksFromCounts();
+
+        trucks.push({
+          typeId,
+          state: "idleLeft",
+          x: 0,
+          timerMs: 1500,
+        });
+
         updateUI();
         saveGame();
       }
