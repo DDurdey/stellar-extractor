@@ -237,6 +237,7 @@ export default function Home() {
           state: "idleLeft",
           x: 0,
           timerMs: 1500 + index * 250,
+          rotation: 0,
         });
 
         for (let i = 0; i < (truckCounts.small || 0); i++) trucks.push(makeTruck("small", i));
@@ -1119,35 +1120,72 @@ export default function Home() {
           if (t.state === "idleLeft") {
             t.timerMs -= dtMs;
             t.x = 0;
+            t.rotation = 0;
+
             if (t.timerMs <= 0) {
               t.state = "movingOut";
             }
-          } else if (t.state === "movingOut") {
+          }
+
+          else if (t.state === "movingOut") {
             t.x += getTruckTravelSpeed(t.typeId);
+            t.rotation = 0;
+
             if (t.x > canvas.width + type.drawW + 20) {
               t.state = "offscreenGather";
               t.timerMs = getTruckGatherMs(t.typeId);
             }
-          } else if (t.state === "offscreenGather") {
+          }
+
+          else if (t.state === "offscreenGather") {
             t.timerMs -= dtMs;
+
             if (t.timerMs <= 0) {
               t.state = "movingIn";
               t.x = canvas.width + type.drawW + 20;
+              t.rotation = Math.PI; // flip ONCE here
             }
-          } else if (t.state === "movingIn") {
+          }
+
+          else if (t.state === "movingIn") {
             t.x -= getTruckTravelSpeed(t.typeId);
+            // stay flipped the whole way back
+
             if (t.x <= 0) {
               t.x = 0;
               t.state = "unloading";
               t.timerMs = getTruckUnloadMs(t.typeId);
+              t.unloadTotalMs = t.timerMs;
             }
-          } else if (t.state === "unloading") {
+          }
+
+          else if (t.state === "unloading") {
             t.timerMs -= dtMs;
             t.x = 0;
+
+            const FINISH_EARLY_MS = 50;
+
+            const spinWindowMs = t.unloadTotalMs - FINISH_EARLY_MS;
+
+            if (t.timerMs > FINISH_EARLY_MS && spinWindowMs > 0) {
+              const progress =
+                (t.timerMs - FINISH_EARLY_MS) / spinWindowMs;
+
+              // progress goes from 1 → 0
+              t.rotation = Math.PI * progress;
+            } else {
+              // last 50ms: fully aligned
+              t.rotation = 0;
+            }
+
             if (t.timerMs <= 0) {
               ore += getTruckYield(t.typeId);
+
               t.state = "idleLeft";
               t.timerMs = 2000;
+              t.rotation = 0;
+              delete t.unloadTotalMs;
+
               updateUI();
             }
           }
@@ -1270,6 +1308,23 @@ export default function Home() {
               padding +
               (i * spacing) % Math.max(spacing, usableHeight - spacing);
 
+            const w = TRUCK_TYPES[typeId].drawW;
+            const h = TRUCK_TYPES[typeId].drawH;
+
+            const baseX = t.x + 20;
+            const baseY = y;
+
+            ctx.save();
+
+            // move to center of truck
+            ctx.translate(baseX + w / 2, baseY + h / 2);
+
+            ctx.rotate(t.rotation || 0);
+
+            // draw relative to top-left
+            ctx.translate(-w / 2, -h / 2);
+
+            // ===== BODY =====
             ctx.fillStyle =
               typeId === "small"
                 ? "#c9a227"
@@ -1277,12 +1332,34 @@ export default function Home() {
                   ? "#b87333"
                   : "#8b0000";
 
-            ctx.fillRect(
-              t.x + 20,
-              y,
-              TRUCK_TYPES[typeId].drawW,
-              TRUCK_TYPES[typeId].drawH
-            );
+            ctx.fillRect(0, 0, w, h);
+
+            // ===== CAB =====
+            ctx.fillStyle =
+              typeId === "small" ? "#333"
+                : typeId === "medium" ? "#444"
+                  : "#555";
+
+            ctx.fillRect(w - 8, 2, 8, h - 4);
+
+            // ===== CARGO STRIP =====
+            ctx.fillStyle = "rgba(255,255,255,0.15)";
+            ctx.fillRect(6, h / 2 - 1, w - 14, 2);
+
+            // ===== THRUSTER =====
+            if (t.state === "movingOut" || t.state === "movingIn") {
+              ctx.fillStyle = "rgba(0,255,255,0.7)";
+              ctx.fillRect(-4, h / 2 - 2, 4, 4);
+
+              ctx.fillStyle = "rgba(0,255,255,0.35)";
+              ctx.fillRect(-8, h / 2 - 1, 4, 2);
+            }
+
+            // ===== OUTLINE =====
+            ctx.strokeStyle = "rgba(0,0,0,0.4)";
+            ctx.strokeRect(0, 0, w, h);
+
+            ctx.restore(); // ✅ END TRANSFORM SCOPE
           });
         };
 
