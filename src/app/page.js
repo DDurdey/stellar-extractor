@@ -1,3 +1,27 @@
+/**
+ * ============================================================
+ * STELLAR EXTRACTOR — MAIN GAME PAGE
+ * ------------------------------------------------------------
+ * This file is the core runtime for the Stellar Extractor game.
+ * It handles:
+ *  - Firebase auth + save data
+ *  - Canvas rendering
+ *  - Game loop & animation
+ *  - Sector logic (asteroids + trucks)
+ *  - UI wiring (DOM buttons + sidebar)
+ *
+ * NOTE:
+ * This is intentionally written in an imperative, game-loop style
+ * instead of idiomatic React. React is used ONLY for:
+ *  - Page lifecycle
+ *  - Auth redirects
+ *  - Canvas mounting
+ *
+ * All game state is stored in local variables, NOT React state,
+ * to avoid rerenders killing performance.
+ * ============================================================
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -41,6 +65,25 @@ export default function Home() {
 
     window.location.reload();
   }
+
+  /**
+ * ============================================================
+ * GAME INITIALIZATION & LIFECYCLE
+ * ------------------------------------------------------------
+ * This useEffect:
+ *  - Waits for Firebase auth
+ *  - Ensures a save file exists
+ *  - Loads saved data
+ *  - Sets up the canvas
+ *  - Starts the game loop
+ *  - Wires all UI buttons
+ *  - Handles cleanup on unmount
+ *
+ * IMPORTANT:
+ * Everything inside this effect is effectively the "engine".
+ * React is NOT used for state updates inside the game.
+ * ============================================================
+ */
 
   useEffect(() => {
     if (!auth || !db) return;
@@ -133,7 +176,6 @@ export default function Home() {
         canvas.width = width;
         canvas.height = height;
 
-        // 🔥 THIS IS THE IMPORTANT PART
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
 
@@ -142,6 +184,46 @@ export default function Home() {
       resizeCanvas();
       window.addEventListener("resize", resizeCanvas);
       removeResize = () => window.removeEventListener("resize", resizeCanvas);
+
+      /**
+       * ============================================================
+       * GAME SYSTEM BREAKDOWN
+       * ------------------------------------------------------------
+       *
+       * SHARED STATE
+       *  - ore, sector, unlocked sectors
+       *  - passive income & offline progress
+       *
+       * SECTOR 1 — ASTEROID MINING
+       *  - Manual clicking
+       *  - Asteroid spawning
+       *  - Drone combat
+       *  - Explosions & lasers
+       *
+       * SECTOR 2 — SPACE TRUCKS
+       *  - Truck types (small / medium / large)
+       *  - Travel → gather → return → unload loop
+       *  - Visual rotation + unloading animation
+       *
+       * GAME LOOP
+       *  - requestAnimationFrame update()
+       *  - Separate update & draw passes
+       *  - Starfield runs globally
+       *
+       * UI SYSTEM
+       *  - DOM-driven (not React state)
+       *  - updateUI() is the single source of truth
+       *
+       * SAVE SYSTEM
+       *  - Auto-save every 10s
+       *  - Save on upgrades
+       *  - Offline progress calculated on load
+       *
+       * CLEANUP
+       *  - Clears all timers, listeners, RAF
+       *  - Prevents memory leaks on route change
+       * ============================================================
+       */
 
       // =========================
       // SHARED GAME STATE
@@ -331,6 +413,21 @@ export default function Home() {
 
         rebuildTrucksFromCounts();
         rebuildDroneUnits();
+
+        /**
+         * ============================================================
+         * OFFLINE PROGRESS
+         * ------------------------------------------------------------
+         * When the game loads, the time elapsed since the last save
+         * is calculated.
+         *
+         * Total ore gained while offline is:
+         *   (ore per second) × (seconds offline)
+         *
+         * This ensures passive systems (drones + trucks) continue
+         * to generate resources even when the player is not active.
+         * ============================================================
+         */
 
         // =========================
         // OFFLINE PROGRESS
@@ -638,6 +735,14 @@ export default function Home() {
 
         passiveIncomeInterval = setInterval(() => {
           const incomePerSecond = getTotalOrePerSecond();
+
+          /**
+           * Floating-point buffer used to accumulate fractional ore
+           * from passive income.
+           *
+           * Prevents precision loss by only converting to whole ore
+           * when enough fractional value has accumulated.
+           */
 
           oreFloatBuffer += incomePerSecond;
 
@@ -1087,6 +1192,23 @@ export default function Home() {
       // =========================
       let lastFrameMs = performance.now();
 
+      /**
+       * ============================================================
+       * TRUCK STATE MACHINE
+       * ------------------------------------------------------------
+       * Each truck runs through the following states:
+       *
+       * idleLeft        → waiting at station
+       * movingOut       → traveling to mining area
+       * offscreenGather → mining offscreen
+       * movingIn        → returning to station (flipped)
+       * unloading       → unloading ore + rotating back
+       *
+       * This explicit state machine avoids complex timing bugs
+       * and makes truck behavior deterministic and debuggable.
+       * ============================================================
+       */
+
       function updateSector1(dtMs) {
         for (let a of asteroids) {
           a.y += a.speed;
@@ -1392,6 +1514,24 @@ export default function Home() {
         }
       }
 
+      /**
+       * ============================================================
+       * UPDATE vs DRAW SEPARATION
+       * ------------------------------------------------------------
+       * update():
+       *  - Advances game logic
+       *  - Moves entities
+       *  - Handles timers and state changes
+       *
+       * draw():
+       *  - Pure rendering only
+       *  - No game logic or mutations
+       *
+       * This separation mirrors standard game engine architecture
+       * and keeps logic predictable.
+       * ============================================================
+       */
+
       function draw() {
         // Clear background
         ctx.fillStyle = SECTORS[currentSector].background;
@@ -1431,11 +1571,9 @@ export default function Home() {
           const gap = 40;
 
           for (let x = 40; x < canvas.width; x += bayWidth + gap) {
-            // bay frame
             ctx.fillStyle = "#1a1d22";
             ctx.fillRect(x, y - bayHeight - 5, bayWidth, bayHeight);
 
-            // inner glow
             const grd = ctx.createLinearGradient(0, y - bayHeight, 0, y);
             grd.addColorStop(0, "rgba(0,200,255,0.25)");
             grd.addColorStop(1, "rgba(0,200,255,0)");
