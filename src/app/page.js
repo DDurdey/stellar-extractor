@@ -368,7 +368,7 @@ export default function Home() {
       // ===== MAX LEVELS =====
       const MAX_CLICK_LEVEL = 20;
       const MAX_DRONE_DAMAGE_LEVEL = 25;
-      const MAX_DRONE_FIRE_RATE_LEVEL = 15;
+      const MAX_DRONE_FIRE_RATE_LEVEL = 10;
       const MAX_SPAWN_RATE_LEVEL = 20;
 
       const MAX_TRUCK_GATHER_LEVEL = 10;
@@ -604,7 +604,9 @@ export default function Home() {
 
       function getDroneOrePerSecond() {
         if (drones === 0) return 0;
-        return (drones * droneDamage) / (droneFireRate / 1000);
+        if (droneFireRate <= 0) return 0; // safety
+
+        return (drones * droneDamage * 1000) / droneFireRate;
       }
 
       function getTruckOrePerSecond(typeId) {
@@ -977,13 +979,15 @@ export default function Home() {
         if (droneFireRateLevel >= MAX_DRONE_FIRE_RATE_LEVEL) return;
 
         const cost = getDroneFireRateUpgradeCost();
-        if (ore >= cost && droneFireRate > 200) {
-          ore -= cost;
-          droneFireRate -= 150;
-          droneFireRateLevel++;
-          updateUI();
-          saveGame();
-        }
+        if (ore < cost) return;
+
+        ore -= cost;
+        droneFireRateLevel++;
+
+        droneFireRate = Math.max(200, droneFireRate - 150);
+
+        updateUI();
+        saveGame();
       };
 
       handleUpgradeSpawnRate = () => {
