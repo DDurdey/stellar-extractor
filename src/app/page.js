@@ -365,6 +365,16 @@ export default function Home() {
       const spawnRateBaseCost = 750;
       const spawnRateGrowth = 2.2;
 
+      // ===== MAX LEVELS =====
+      const MAX_CLICK_LEVEL = 20;
+      const MAX_DRONE_DAMAGE_LEVEL = 25;
+      const MAX_DRONE_FIRE_RATE_LEVEL = 15;
+      const MAX_SPAWN_RATE_LEVEL = 20;
+
+      const MAX_TRUCK_GATHER_LEVEL = 10;
+      const MAX_TRUCK_UNLOAD_LEVEL = 10;
+      const MAX_TRUCK_TRAVEL_LEVEL = 10;
+
       function getClickUpgradeCost() {
         return Math.floor(clickBaseCost * Math.pow(clickCostGrowth, clickLevel - 1));
       }
@@ -598,14 +608,10 @@ export default function Home() {
       }
 
       function getTruckOrePerSecond(typeId) {
-        const baseRates = {
-          small: 25,
-          medium: 120,
-          large: 600,
-        };
+        const cycleSeconds = getTruckCycleSeconds(typeId);
+        if (cycleSeconds <= 0) return 0;
 
-        const upgradeMultiplier = 1 + truckGatherLevel * 0.6;
-        return baseRates[typeId] * upgradeMultiplier;
+        return getTruckYield(typeId) / cycleSeconds;
       }
 
       function getTotalOrePerSecond() {
@@ -653,6 +659,22 @@ export default function Home() {
 
       function getTotalOrePerMinute() {
         return getTotalOrePerSecond() * 60;
+      }
+
+      function getTruckCycleSeconds(typeId) {
+        const type = TRUCK_TYPES[typeId];
+
+        const travelDistance = canvas.width + type.drawW + 20;
+
+        const travelSpeed = getTruckTravelSpeed(typeId);
+        const travelTimeMs =
+          (travelDistance / travelSpeed) * (1000 / 60) * 2;
+
+        const gatherMs = getTruckGatherMs(typeId);
+        const unloadMs = getTruckUnloadMs(typeId);
+
+        const totalMs = travelTimeMs + gatherMs + unloadMs;
+        return totalMs / 1000;
       }
 
       function getTruckBuyCost(typeId) {
@@ -703,7 +725,11 @@ export default function Home() {
         const upSpawnEl = document.getElementById("upgradeSpawnRate");
         if (upSpawnEl) {
           upSpawnEl.textContent =
-            `Upgrade Asteroid Spawn (${getSpawnRateUpgradeCost()} ore) Lv ${spawnRateLevel}`;
+            spawnRateLevel >= MAX_SPAWN_RATE_LEVEL
+              ? "Upgrade Asteroid Spawn (MAX)"
+              : `Upgrade Asteroid Spawn (${getSpawnRateUpgradeCost()} ore) Lv ${spawnRateLevel}`;
+
+          upSpawnEl.disabled = spawnRateLevel >= MAX_SPAWN_RATE_LEVEL;
         }
 
         // Sector switching
@@ -742,8 +768,18 @@ export default function Home() {
 
         if (upClickEl) upClickEl.textContent = `Upgrade Click (${getClickUpgradeCost()} ore)`;
         if (buyDroneEl) buyDroneEl.textContent = `Buy Drone (${getDroneCost()} ore)`;
-        if (upDmgEl) upDmgEl.textContent = `Upgrade Drone Damage (${getDroneDamageUpgradeCost()} ore)`;
-        if (upRateEl) upRateEl.textContent = `Upgrade Drone Speed (${getDroneFireRateUpgradeCost()} ore)`;
+        if (upDmgEl) {
+          upDmgEl.textContent =
+            droneDamageLevel >= MAX_DRONE_DAMAGE_LEVEL
+              ? "Upgrade Drone Damage (MAX)"
+              : `Upgrade Drone Damage (${getDroneDamageUpgradeCost()} ore)`;
+        }
+        if (upRateEl) {
+          upRateEl.textContent =
+            droneFireRateLevel >= MAX_DRONE_FIRE_RATE_LEVEL
+              ? "Upgrade Drone Speed (MAX)"
+              : `Upgrade Drone Speed (${getDroneFireRateUpgradeCost()} ore)`;
+        }
 
         if (upClickEl) {
           upClickEl.disabled = currentSector !== 1;
@@ -758,12 +794,27 @@ export default function Home() {
         if (buyTruckLargeEl)
           buyTruckLargeEl.textContent = `Buy Large Truck (${getTruckBuyCost("large")} ore)`;
 
-        if (upTruckGatherEl)
-          upTruckGatherEl.textContent = `Upgrade Gather (${getTruckUpgradeCost("gather")} ore) Lv ${truckGatherLevel}`;
-        if (upTruckUnloadEl)
-          upTruckUnloadEl.textContent = `Upgrade Unload (${getTruckUpgradeCost("unload")} ore) Lv ${truckUnloadLevel}`;
-        if (upTruckTravelEl)
-          upTruckTravelEl.textContent = `Upgrade Travel (${getTruckUpgradeCost("travel")} ore) Lv ${truckTravelLevel}`;
+        if (upTruckGatherEl) {
+          upTruckGatherEl.textContent =
+            truckGatherLevel >= MAX_TRUCK_GATHER_LEVEL
+              ? "Upgrade Gather (MAX)"
+              : `Upgrade Gather (${getTruckUpgradeCost("gather")} ore) Lv ${truckGatherLevel}`;
+        }
+
+        if (upTruckUnloadEl) {
+          upTruckUnloadEl.textContent =
+            truckUnloadLevel >= MAX_TRUCK_UNLOAD_LEVEL
+              ? "Upgrade Unload (MAX)"
+              : `Upgrade Unload (${getTruckUpgradeCost("unload")} ore) Lv ${truckUnloadLevel}`;
+        }
+
+        if (upTruckTravelEl) {
+          upTruckTravelEl.textContent =
+            truckTravelLevel >= MAX_TRUCK_TRAVEL_LEVEL
+              ? "Upgrade Travel (MAX)"
+              : `Upgrade Travel (${getTruckUpgradeCost("travel")} ore) Lv ${truckTravelLevel}`;
+        }
+
 
         if (truckCountsEl) {
           truckCountsEl.textContent =
@@ -839,9 +890,49 @@ export default function Home() {
       const upgradeTruckUnloadBtn = document.getElementById("upgradeTruckUnload");
       const upgradeTruckTravelBtn = document.getElementById("upgradeTruckTravel");
 
+      handleUpTruckGather = () => {
+        if (currentSector !== 2) return;
+        if (truckGatherLevel >= MAX_TRUCK_GATHER_LEVEL) return;
+
+        const cost = getTruckUpgradeCost("gather");
+        if (ore >= cost) {
+          ore -= cost;
+          truckGatherLevel++;
+          updateUI();
+          saveGame();
+        }
+      };
+
+      handleUpTruckUnload = () => {
+        if (currentSector !== 2) return;
+        if (truckUnloadLevel >= MAX_TRUCK_UNLOAD_LEVEL) return;
+
+        const cost = getTruckUpgradeCost("unload");
+        if (ore >= cost) {
+          ore -= cost;
+          truckUnloadLevel++;
+          updateUI();
+          saveGame();
+        }
+      };
+
+      handleUpTruckTravel = () => {
+        if (currentSector !== 2) return;
+        if (truckTravelLevel >= MAX_TRUCK_TRAVEL_LEVEL) return;
+
+        const cost = getTruckUpgradeCost("travel");
+        if (ore >= cost) {
+          ore -= cost;
+          truckTravelLevel++;
+          updateUI();
+          saveGame();
+        }
+      };
+
       // Sector 1 buttons
       handleUpgradeClick = () => {
         if (currentSector !== 1) return;
+        if (clickLevel >= MAX_CLICK_LEVEL) return;
 
         const cost = getClickUpgradeCost();
         if (ore >= cost) {
@@ -869,6 +960,7 @@ export default function Home() {
 
       handleUpgradeDroneDamage = () => {
         if (currentSector !== 1) return;
+        if (droneDamageLevel >= MAX_DRONE_DAMAGE_LEVEL) return;
 
         const cost = getDroneDamageUpgradeCost();
         if (ore >= cost) {
@@ -882,6 +974,7 @@ export default function Home() {
 
       handleUpgradeDroneFireRate = () => {
         if (currentSector !== 1) return;
+        if (droneFireRateLevel >= MAX_DRONE_FIRE_RATE_LEVEL) return;
 
         const cost = getDroneFireRateUpgradeCost();
         if (ore >= cost && droneFireRate > 200) {
@@ -895,6 +988,7 @@ export default function Home() {
 
       handleUpgradeSpawnRate = () => {
         if (currentSector !== 1) return;
+        if (spawnRateLevel >= MAX_SPAWN_RATE_LEVEL) return;
 
         const cost = getSpawnRateUpgradeCost();
         if (ore >= cost) {
